@@ -1,0 +1,23 @@
+commit d3fee3a3b923339fb45d23f60ee0170a5ca25957
+Author: Thomas Woerner <twoerner@redhat.com>
+Date:   Mon Apr 3 15:06:36 2017 +0200
+
+    firewall-offline-cmd: Fix --remove-service-from-zone option RHBZ#1438127
+    
+    The wrong option name has been used internally which resulted in the NoneType
+    object is not iterable error.
+
+diff --git a/src/firewall-offline-cmd b/src/firewall-offline-cmd
+index b229f39..b1e8a6c 100755
+--- a/src/firewall-offline-cmd
++++ b/src/firewall-offline-cmd
+@@ -2076,7 +2076,8 @@ try:
+             cmd.add_sequence(a.add_service, fw_settings.addService,
+                              fw_settings.queryService, None, "'%s'")
+         elif a.remove_service_from_zone:
+-            cmd.remove_sequence(a.remove_service, fw_settings.removeService,
++            cmd.remove_sequence(a.remove_service_from_zone,
++                                fw_settings.removeService,
+                                 fw_settings.queryService, None, "'%s'")
+         elif a.query_service:
+             cmd.query_sequence(a.query_service, fw_settings.queryService,

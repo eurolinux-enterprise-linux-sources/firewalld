@@ -1,0 +1,45 @@
+From 2243b7f14921a1d8b24c8090d531451e7ab9e0dd Mon Sep 17 00:00:00 2001
+From: Phil Sutter <psutter@redhat.com>
+Date: Mon, 11 Sep 2017 18:47:21 +0200
+Subject: [PATCH 1/5] doc: firewall-cmd: Document quirk in --reload option
+
+Contrary to what one might assume, --reload and --complete-reload leave
+changes done via the direct interface in place.
+
+Fixes: RHBZ#1452137
+Signed-off-by: Phil Sutter <psutter@redhat.com>
+---
+ doc/xml/firewall-cmd.xml | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/doc/xml/firewall-cmd.xml b/doc/xml/firewall-cmd.xml
+index bf4e7a0c21a9c..bdb5767634aaa 100644
+--- a/doc/xml/firewall-cmd.xml
++++ b/doc/xml/firewall-cmd.xml
+@@ -132,6 +132,11 @@
+ 	      i.e. all runtime only changes done until reload are lost with reload
+ 	      if they have not been also in permanent configuration.
+ 	    </para>
++	    <para>
++	      Note: Runtime changes applied via the direct interface are not
++	      affected and will therefore stay in place until firewalld daemon
++	      is restarted completely.
++	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+ 
+@@ -141,6 +146,11 @@
+ 	    <para>
+ 	      Reload firewall completely, even netfilter kernel modules. This will most likely terminate active connections, because state information is lost. This option should only be used in case of severe firewall problems. For example if there are state information problems that no connection can be established with correct firewall rules.
+ 	    </para>
++	    <para>
++	      Note: Runtime changes applied via the direct interface are not
++	      affected and will therefore stay in place until firewalld daemon
++	      is restarted completely.
++	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+ 
+-- 
+2.13.1
+

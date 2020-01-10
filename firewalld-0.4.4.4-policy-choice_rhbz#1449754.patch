@@ -1,0 +1,44 @@
+commit 0c480ec760c3ecaeea325041bdffc6d3d1153d88
+Author: Thomas Woerner <twoerner@redhat.com>
+Date:   Wed May 17 17:56:39 2017 +0200
+
+    Rename extension for policy choices (server and desktop) to .policy.choice (RHBZ#1449754)
+    
+    This is done at installation time to still use autofoo targets etc. A change in firewall-offline command to fix --policy-server and --policy-desktop options
+    has been needed for this also.
+
+diff --git a/config/Makefile.am b/config/Makefile.am
+index 33cb7da..bdc5651 100644
+--- a/config/Makefile.am
++++ b/config/Makefile.am
+@@ -347,5 +347,7 @@ uninstall-local: $(UNINSTALL_TARGETS)
+ 
+ install-data-hook:
+ 	cd $(DESTDIR)$(polkit1_actiondir) && \
++		mv org.fedoraproject.FirewallD1.server.policy org.fedoraproject.FirewallD1.server.policy.choice && \
++		mv org.fedoraproject.FirewallD1.desktop.policy org.fedoraproject.FirewallD1.desktop.policy.choice && \
+ 		rm -f org.fedoraproject.FirewallD1.policy && \
+-		$(LN_S) org.fedoraproject.FirewallD1.server.policy org.fedoraproject.FirewallD1.policy
++		$(LN_S) org.fedoraproject.FirewallD1.server.policy.choice org.fedoraproject.FirewallD1.policy
+diff --git a/src/firewall-offline-cmd b/src/firewall-offline-cmd
+index b1e8a6c..ebeb1ec 100755
+--- a/src/firewall-offline-cmd
++++ b/src/firewall-offline-cmd
+@@ -478,13 +478,13 @@ def pk_symlink(product='server'):
+     _PK_DIR = '/usr/share/polkit-1/actions/'
+     _PK_NAME = 'org.fedoraproject.FirewallD1.'
+     os.chdir(_PK_DIR)
+-    if os.path.isfile(_PK_NAME+product+'.policy'):
++    if os.path.isfile(_PK_NAME+product+'.policy.choice'):
+         if os.path.isfile(_PK_NAME+'policy'):
+             os.remove(_PK_NAME+'policy')
+-        os.symlink(_PK_NAME+product+'.policy', _PK_NAME+'policy')
+-        cmd.print_and_exit('symlink '+_PK_DIR+_PK_NAME+product+'.policy -> '+_PK_NAME+'policy')
++        os.symlink(_PK_NAME+product+'.policy.choice', _PK_NAME+'policy')
++        cmd.print_and_exit('symlink '+_PK_DIR+_PK_NAME+product+'.policy.choice -> '+_PK_NAME+'policy')
+     else:
+-        cmd.fail('no such file '+_PK_DIR+_PK_NAME+product+'.policy')
++        cmd.fail('no such file '+_PK_DIR+_PK_NAME+product+'.policy.choice')
+ 
+ # system-config-firewall
+ def read_sysconfig_args(config_file=SYSTEM_CONFIG_FIREWALL):

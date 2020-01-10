@@ -1,0 +1,46 @@
+diff -up firewalld-0.4.4.3/doc/man/man1/Makefile.am.exclude_firewallctl_rhbz#1374799 firewalld-0.4.4.3/doc/man/man1/Makefile.am
+--- firewalld-0.4.4.3/doc/man/man1/Makefile.am.exclude_firewallctl_rhbz#1374799	2016-12-16 13:35:59.000000000 +0100
++++ firewalld-0.4.4.3/doc/man/man1/Makefile.am	2017-02-08 19:20:18.109073530 +0100
+@@ -1,3 +1,8 @@
+ EXTRA_DIST = $(man_MANS)
+ 
+-man_MANS = firewall*.1
++man_MANS = \
++	firewall-applet.1 \
++	firewall-cmd.1 \
++	firewall-config.1 \
++	firewalld.1 \
++	firewall-offline-cmd.1
+diff -up firewalld-0.4.4.3/doc/xml/Makefile.am.exclude_firewallctl_rhbz#1374799 firewalld-0.4.4.3/doc/xml/Makefile.am
+--- firewalld-0.4.4.3/doc/xml/Makefile.am.exclude_firewallctl_rhbz#1374799	2016-10-31 10:19:14.000000000 +0100
++++ firewalld-0.4.4.3/doc/xml/Makefile.am	2017-02-08 19:16:45.904176658 +0100
+@@ -11,7 +11,6 @@ man1_MANS = \
+ 	../man/man1/firewall-applet.1 \
+ 	../man/man1/firewall-cmd.1 \
+ 	../man/man1/firewall-config.1 \
+-	../man/man1/firewallctl.1 \
+ 	../man/man1/firewalld.1 \
+ 	../man/man1/firewall-offline-cmd.1
+ 
+diff -up firewalld-0.4.4.3/doc/xml/seealso.xml.exclude_firewallctl_rhbz#1374799 firewalld-0.4.4.3/doc/xml/seealso.xml
+--- firewalld-0.4.4.3/doc/xml/seealso.xml.exclude_firewallctl_rhbz#1374799	2016-10-31 10:19:14.000000000 +0100
++++ firewalld-0.4.4.3/doc/xml/seealso.xml	2017-02-08 19:16:45.904176658 +0100
+@@ -29,7 +29,6 @@
+     <member><citerefentry><refentrytitle>firewalld</refentrytitle><manvolnum>1</manvolnum></citerefentry></member>
+     <member><citerefentry><refentrytitle>firewall-cmd</refentrytitle><manvolnum>1</manvolnum></citerefentry></member>
+     <member><citerefentry><refentrytitle>firewall-config</refentrytitle><manvolnum>1</manvolnum></citerefentry></member>
+-    <member><citerefentry><refentrytitle>firewallctl</refentrytitle><manvolnum>1</manvolnum></citerefentry></member>
+     <member><citerefentry><refentrytitle>firewalld.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry></member>
+     <member><citerefentry><refentrytitle>firewalld.direct</refentrytitle><manvolnum>5</manvolnum></citerefentry></member>
+     <member><citerefentry><refentrytitle>firewalld.dbus</refentrytitle><manvolnum>5</manvolnum></citerefentry></member>
+diff -up firewalld-0.4.4.3/src/Makefile.am.exclude_firewallctl_rhbz#1374799 firewalld-0.4.4.3/src/Makefile.am
+--- firewalld-0.4.4.3/src/Makefile.am.exclude_firewallctl_rhbz#1374799	2017-02-08 17:51:00.000000000 +0100
++++ firewalld-0.4.4.3/src/Makefile.am	2017-02-08 19:16:45.904176658 +0100
+@@ -1,6 +1,6 @@
+ SUBDIRS = icons
+ 
+-dist_bin_SCRIPTS = firewall-applet firewall-cmd firewall-offline-cmd firewall-config firewallctl
++dist_bin_SCRIPTS = firewall-applet firewall-cmd firewall-offline-cmd firewall-config
+ dist_sbin_SCRIPTS = firewalld
+ 
+ gladedir = $(pkgdatadir)

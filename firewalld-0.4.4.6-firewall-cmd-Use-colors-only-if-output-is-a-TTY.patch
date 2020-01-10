@@ -1,0 +1,51 @@
+From 68834a49d9d55bffdc4febeaf23a892011399a63 Mon Sep 17 00:00:00 2001
+From: Phil Sutter <psutter@redhat.com>
+Date: Wed, 13 Sep 2017 22:03:31 +0200
+Subject: [PATCH 3/5] firewall-cmd: Use colors only if output is a TTY
+
+Use isatty() method to check whether output is a TTY or not (e.g.
+redirected to a file or pipe) before enclosing error messages in TTY
+color escape strings.
+
+While here, simplify things a bit by making print_and_exit() call
+print_warning() internally, also adjust commented out code for colored
+non-error messages.
+
+Fixes: RHBZ#1368544
+Signed-off-by: Phil Sutter <psutter@redhat.com>
+---
+ src/firewall/command.py | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/firewall/command.py b/src/firewall/command.py
+index 2dc1c509ae556..50bd4bd0f4103 100644
+--- a/src/firewall/command.py
++++ b/src/firewall/command.py
+@@ -64,17 +64,19 @@ class FirewallCommand(object):
+     def print_warning(self, msg=None):
+         FAIL = '\033[91m'
+         END = '\033[00m'
+-        self.print_error_msg(FAIL + msg + END)
++        if sys.stderr.isatty():
++            msg = FAIL + msg + END
++        self.print_error_msg(msg)
+ 
+     def print_and_exit(self, msg=None, exit_code=0):
+         #OK = '\033[92m'
+-        FAIL = '\033[91m'
+-        END = '\033[00m'
++        #END = '\033[00m'
+         if exit_code > 1:
+-            self.print_error_msg(FAIL + msg + END)
++            self.print_warning(msg)
+         else:
++            #if sys.stdout.isatty():
++            #   msg = OK + msg + END
+             self.print_msg(msg)
+-            #self.print_msg(OK + msg + END)
+         sys.exit(exit_code)
+ 
+     def fail(self, msg=None):
+-- 
+2.13.1
+

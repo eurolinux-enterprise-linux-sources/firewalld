@@ -1,0 +1,440 @@
+commit 3e0997f5effaec309e03c9c7c639d8243536ad37
+Author: Thomas Woerner <twoerner@redhat.com>
+Date:   Tue Apr 4 19:03:27 2017 +0200
+
+    Support sctp and dccp in ports, source-ports, forward-ports, helpers and rich rules
+    
+    This patch adds support to use ports with the protocols sctp and dccp if also
+    a port id is specified. The use of sctp and dccp is now also allowed in
+    source-ports, forward-ports, helpers and rich language rules.
+    
+    The test suite has been expanded to also test the new combinations.
+    
+    This fixes RHBZ#1429808
+
+diff --git a/doc/xml/firewalld.helper.xml b/doc/xml/firewalld.helper.xml
+index 9de4589..d931e22 100644
+--- a/doc/xml/firewalld.helper.xml
++++ b/doc/xml/firewalld.helper.xml
+@@ -69,7 +69,7 @@
+ &lt;helper module="<replaceable>nf_conntrack_module</replaceable>" [family="<literal>ipv4</literal>|<literal>ipv6</literal>"]&gt;
+   &lt;short&gt;<replaceable>short</replaceable>&lt;/short&gt;
+   &lt;description&gt;<replaceable>description</replaceable>&lt;/description&gt;
+-  &lt;port <replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>"/&gt;
++  &lt;port <replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"/&gt;
+ &lt;/helper&gt;
+       </programlisting>
+     </para>
+@@ -149,7 +149,7 @@
+ 	  <term>protocol="<replaceable>string</replaceable>"</term>
+           <listitem>
+ 	    <para>
+-              The protocol value can either be <option>tcp</option> or <option>udp</option>.
++              The protocol value can either be <option>tcp</option>, <option>udp</option>, <option>sctp</option> or <option>dccp</option>.
+ 	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+diff --git a/doc/xml/firewalld.service.xml b/doc/xml/firewalld.service.xml
+index 568555f..425f5a9 100644
+--- a/doc/xml/firewalld.service.xml
++++ b/doc/xml/firewalld.service.xml
+@@ -136,7 +136,7 @@
+ 	  <term>protocol="<replaceable>string</replaceable>"</term>
+           <listitem>
+ 	    <para>
+-              The protocol value can either be <option>tcp</option> or <option>udp</option>.
++              The protocol value can either be <option>tcp</option>, <option>udp</option>, <option>sctp</option> or <option>dccp</option>.
+ 	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+@@ -185,7 +185,7 @@
+ 	  <term>protocol="<replaceable>string</replaceable>"</term>
+           <listitem>
+ 	    <para>
+-              The protocol value can either be <option>tcp</option> or <option>udp</option>.
++              The protocol value can either be <option>tcp</option>, <option>udp</option>, <option>sctp</option> or <option>dccp</option>.
+ 	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+diff --git a/doc/xml/firewalld.zone.xml b/doc/xml/firewalld.zone.xml
+index 80290e7..c3283c0 100644
+--- a/doc/xml/firewalld.zone.xml
++++ b/doc/xml/firewalld.zone.xml
+@@ -73,25 +73,25 @@
+   [ &lt;interface name="<replaceable>string</replaceable>"/&gt; ]
+   [ &lt;source address="<replaceable>address</replaceable>[/<replaceable>mask</replaceable>]"|mac="<replaceable>MAC</replaceable>"|ipset="<replaceable>ipset</replaceable>"/&gt; ]
+   [ &lt;service name="<replaceable>string</replaceable>"/&gt; ]
+-  [ &lt;port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>"/&gt; ]
++  [ &lt;port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"/&gt; ]
+   [ &lt;protcol value="<replaceable>protocol</replaceable>"/&gt; ]
+   [ &lt;icmp-block name="<replaceable>string</replaceable>"/&gt; ]
+   [ &lt;icmp-block-inversion/&gt; ]
+   [ &lt;masquerade/&gt; ]
+-  [ &lt;forward-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>" [to-port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]"] [to-addr="<replaceable>ipv4address</replaceable>"]/&gt; ]
+-  [ &lt;source-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>"/&gt; ]
++  [ &lt;forward-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>" [to-port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]"] [to-addr="<replaceable>ipv4address</replaceable>"]/&gt; ]
++  [ &lt;source-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"/&gt; ]
+   [
+     &lt;rule [family="<literal>ipv4</literal>|<literal>ipv6</literal>"]&gt;
+     [ &lt;source address="<replaceable>address</replaceable>[/<replaceable>mask</replaceable>]"|mac="<replaceable>MAC</replaceable>"|ipset="<replaceable>ipset</replaceable>" [invert="<replaceable>True</replaceable>"]/&gt; ]
+     [ &lt;destination address="<replaceable>address</replaceable>[/<replaceable>mask</replaceable>]" [invert="<replaceable>True</replaceable>"]/&gt; ]
+     [
+       &lt;service name="<replaceable>string</replaceable>"/&gt; |
+-      &lt;port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>"/&gt; |
++      &lt;port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"/&gt; |
+       &lt;protocol value="<replaceable>protocol</replaceable>"/&gt; |
+       &lt;icmp-block name="<replaceable>icmptype</replaceable>"/&gt; |
+       &lt;icmp-type name="<replaceable>icmptype</replaceable>"/&gt; |
+       &lt;masquerade/&gt; |
+-      &lt;forward-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>" [to-port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]"] [to-addr="<replaceable>address</replaceable>"]/&gt;
++      &lt;forward-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>" [to-port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]"] [to-addr="<replaceable>address</replaceable>"]/&gt;
+     ]
+     [ &lt;log [prefix="<replaceable>prefixtext</replaceable>"] [level="<literal>emerg</literal>|<literal>alert</literal>|<literal>crit</literal>|<literal>err</literal>|<literal>warn</literal>|<literal>notice</literal>|<literal>info</literal>|<literal>debug</literal>"]&gt; [&lt;limit value="<replaceable>rate</replaceable>/<replaceable>duration</replaceable>"/&gt;] &lt;/log&gt; ]
+     [ &lt;audit&gt; [&lt;limit value="<replaceable>rate</replaceable>/<replaceable>duration</replaceable>"/&gt;] &lt;/audit&gt; ]
+@@ -249,10 +249,10 @@
+ 	</varlistentry>
+ 
+ 	<varlistentry>
+-	  <term>protocol="<literal>tcp</literal>|<literal>udp</literal>"</term>
++	  <term>protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"</term>
+           <listitem>
+ 	    <para>
+-	      The protocol can either be <replaceable>tcp</replaceable> or <replaceable>udp</replaceable>.
++	      The protocol can either be <replaceable>tcp</replaceable>, <option>udp</option>, <option>sctp</option> or <option>dccp</option>.
+ 	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+@@ -329,10 +329,10 @@
+ 	  </varlistentry>
+ 
+ 	  <varlistentry>
+-	    <term>protocol="<literal>tcp</literal>|<literal>udp</literal>"</term>
++	    <term>protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"</term>
+             <listitem>
+ 	      <para>
+-		The protocol can either be <replaceable>tcp</replaceable> or <replaceable>udp</replaceable>.
++		The protocol can either be <replaceable>tcp</replaceable>, <option>udp</option>, <option>sctp</option> or <option>dccp</option>.
+ 	      </para>
+ 	    </listitem>
+ 	  </varlistentry>
+@@ -382,10 +382,10 @@
+ 	</varlistentry>
+ 
+ 	<varlistentry>
+-	  <term>protocol="<literal>tcp</literal>|<literal>udp</literal>"</term>
++	  <term>protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"</term>
+           <listitem>
+ 	    <para>
+-	      The protocol can either be <replaceable>tcp</replaceable> or <replaceable>udp</replaceable>.
++	      The protocol can either be <replaceable>tcp</replaceable>, <option>udp</option>, <option>sctp</option> or <option>dccp</option>.
+ 	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+@@ -407,13 +407,13 @@
+   [ &lt;destination address="<replaceable>address</replaceable>[/<replaceable>mask</replaceable>]" [invert="<replaceable>True</replaceable>"]/&gt; ]
+   [
+     &lt;service name="<replaceable>string</replaceable>"/&gt; |
+-    &lt;port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>"/&gt; |
++    &lt;port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"/&gt; |
+     &lt;protocol value="<replaceable>protocol</replaceable>"/&gt; |
+     &lt;icmp-block name="<replaceable>icmptype</replaceable>"/&gt; |
+     &lt;icmp-type name="<replaceable>icmptype</replaceable>"/&gt; |
+     &lt;masquerade/&gt; |
+-    &lt;forward-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>" [to-port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]"] [to-addr="<replaceable>address</replaceable>"]/&gt; |
+-    &lt;source-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>"/&gt; |
++    &lt;forward-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>" [to-port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]"] [to-addr="<replaceable>address</replaceable>"]/&gt; |
++    &lt;source-port port="<replaceable>portid</replaceable>[-<replaceable>portid</replaceable>]" protocol="<literal>tcp</literal>|<literal>udp</literal>|<literal>sctp</literal>|<literal>dccp</literal>"/&gt; |
+   ]
+   [ &lt;log [prefix="<replaceable>prefixtext</replaceable>"] [level="<literal>emerg</literal>|<literal>alert</literal>|<literal>crit</literal>|<literal>err</literal>|<literal>warn</literal>|<literal>notice</literal>|<literal>info</literal>|<literal>debug</literal>"]/&gt; [&lt;limit value="<replaceable>rate</replaceable>/<replaceable>duration</replaceable>"/&gt;] &lt;/log&gt; ]
+   [ &lt;audit&gt; [&lt;limit value="<replaceable>rate</replaceable>/<replaceable>duration</replaceable>"/&gt;] &lt;/audit&gt; ]
+diff --git a/src/firewall-config.glade b/src/firewall-config.glade
+index 73cee5c..d209a34 100644
+--- a/src/firewall-config.glade
++++ b/src/firewall-config.glade
+@@ -1263,6 +1263,8 @@
+                     <items>
+                       <item>tcp</item>
+                       <item>udp</item>
++                      <item>sctp</item>
++                      <item>dccp</item>
+                     </items>
+                     <signal name="changed" handler="onForwardChanged" swapped="no"/>
+                   </object>
+@@ -9196,6 +9198,8 @@
+                     <items>
+                       <item>tcp</item>
+                       <item>udp</item>
++                      <item>sctp</item>
++                      <item>dccp</item>
+                     </items>
+                     <signal name="changed" handler="onPortChanged" swapped="no"/>
+                   </object>
+@@ -9597,6 +9601,7 @@
+                       <item translatable="yes">- Select -</item>
+                       <item>ah</item>
+                       <item>esp</item>
++                      <item>dccp</item>
+                       <item>ddp</item>
+                       <item>icmp</item>
+                       <item>igmp</item>
+diff --git a/src/firewall/command.py b/src/firewall/command.py
+index e3adde0..e2d032f 100644
+--- a/src/firewall/command.py
++++ b/src/firewall/command.py
+@@ -267,9 +267,10 @@ class FirewallCommand(object):
+                                 "portid[-portid]%sprotocol" % separator)
+         if not check_port(port):
+             raise FirewallError(errors.INVALID_PORT, port)
+-        if proto not in [ "tcp", "udp" ]:
++        if proto not in [ "tcp", "udp", "sctp", "dccp" ]:
+             raise FirewallError(errors.INVALID_PROTOCOL,
+-                                "'%s' not in {'tcp'|'udp'}" % proto)
++                                "'%s' not in {'tcp'|'udp'|'sctp'|'dccp'}" % \
++                                proto)
+         return (port, proto)
+ 
+     def parse_forward_port(self, value):
+@@ -301,9 +302,10 @@ class FirewallCommand(object):
+ 
+         if not check_port(port):
+             raise FirewallError(errors.INVALID_PORT, port)
+-        if protocol not in [ "tcp", "udp" ]:
++        if protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
+             raise FirewallError(errors.INVALID_PROTOCOL,
+-                                "'%s' not in {'tcp'|'udp'}" % protocol)
++                                "'%s' not in {'tcp'|'udp'|'sctp'|'dccp'}" % \
++                                protocol)
+         if toport and not check_port(toport):
+             raise FirewallError(errors.INVALID_PORT, toport)
+         if toaddr and not check_single_address("ipv4", toaddr):
+diff --git a/src/firewall/core/fw.py b/src/firewall/core/fw.py
+index f32ec22..8dbe59b 100644
+--- a/src/firewall/core/fw.py
++++ b/src/firewall/core/fw.py
+@@ -989,9 +989,10 @@ class Firewall(object):
+     def check_tcpudp(self, protocol):
+         if not protocol:
+             raise FirewallError(errors.MISSING_PROTOCOL)
+-        if protocol not in [ "tcp", "udp" ]:
++        if protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
+             raise FirewallError(errors.INVALID_PROTOCOL,
+-                                "'%s' not in {'tcp'|'udp'}" % protocol)
++                                "'%s' not in {'tcp'|'udp'|'sctp'|'dccp'}" % \
++                                protocol)
+ 
+     def check_ip(self, ip):
+         if not functions.checkIP(ip):
+diff --git a/src/firewall/core/fw_test.py b/src/firewall/core/fw_test.py
+index 62385e6..9516823 100644
+--- a/src/firewall/core/fw_test.py
++++ b/src/firewall/core/fw_test.py
+@@ -456,9 +456,10 @@ class Firewall_test(object):
+     def check_tcpudp(self, protocol):
+         if not protocol:
+             raise FirewallError(errors.MISSING_PROTOCOL)
+-        if not protocol in [ "tcp", "udp" ]:
++        if not protocol in [ "tcp", "udp", "sctp", "dccp" ]:
+             raise FirewallError(errors.INVALID_PROTOCOL,
+-                                "'%s' not in {'tcp'|'udp'}" % protocol)
++                                "'%s' not in {'tcp'|'udp'|'sctp'|'dccp'}" % \
++                                protocol)
+ 
+     def check_ip(self, ip):
+         if not functions.checkIP(ip):
+diff --git a/src/firewall/core/io/io_object.py b/src/firewall/core/io/io_object.py
+index 3ae180a..139439f 100644
+--- a/src/firewall/core/io/io_object.py
++++ b/src/firewall/core/io/io_object.py
+@@ -292,9 +292,10 @@ def check_port(port):
+                             "'%s' is invalid port range" % port)
+ 
+ def check_tcpudp(protocol):
+-    if protocol not in [ "tcp", "udp" ]:
++    if protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
+         raise FirewallError(errors.INVALID_PROTOCOL,
+-                            "'%s' not from {'tcp'|'udp'}" % protocol)
++                            "'%s' not from {'tcp'|'udp'|'sctp'|'dccp'}" % \
++                            protocol)
+ 
+ def check_protocol(protocol):
+     if not functions.checkProtocol(protocol):
+diff --git a/src/firewall/core/rich.py b/src/firewall/core/rich.py
+index b33009f..3adcb4d 100644
+--- a/src/firewall/core/rich.py
++++ b/src/firewall/core/rich.py
+@@ -576,7 +576,7 @@ class Rich_Rule(object):
+         elif type(self.element) == Rich_Port:
+             if not functions.check_port(self.element.port):
+                 raise FirewallError(errors.INVALID_PORT, self.element.port)
+-            if self.element.protocol not in [ "tcp", "udp" ]:
++            if self.element.protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
+                 raise FirewallError(errors.INVALID_PROTOCOL, self.element.protocol)
+ 
+         # protocol
+@@ -611,7 +611,7 @@ class Rich_Rule(object):
+         elif type(self.element) == Rich_ForwardPort:
+             if not functions.check_port(self.element.port):
+                 raise FirewallError(errors.INVALID_PORT, self.element.port)
+-            if self.element.protocol not in [ "tcp", "udp" ]:
++            if self.element.protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
+                 raise FirewallError(errors.INVALID_PROTOCOL, self.element.protocol)
+             if self.element.to_port == "" and self.element.to_address == "":
+                 raise FirewallError(errors.INVALID_PORT, self.element.to_port)
+@@ -631,7 +631,7 @@ class Rich_Rule(object):
+         elif type(self.element) == Rich_SourcePort:
+             if not functions.check_port(self.element.port):
+                 raise FirewallError(errors.INVALID_PORT, self.element.port)
+-            if self.element.protocol not in [ "tcp", "udp" ]:
++            if self.element.protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
+                 raise FirewallError(errors.INVALID_PROTOCOL, self.element.protocol)
+ 
+         # other element and not empty?
+diff --git a/src/tests/firewall-cmd_test.sh b/src/tests/firewall-cmd_test.sh
+index 653c644..ea076a0 100755
+--- a/src/tests/firewall-cmd_test.sh
++++ b/src/tests/firewall-cmd_test.sh
+@@ -339,6 +339,15 @@ assert_good " --query-port=111-222/udp --zone=${default_zone}"
+ assert_good "--remove-port 111-222/udp"
+ assert_bad  " --query-port=111-222/udp"
+ 
++assert_good "   --add-port=5000/sctp"
++assert_good " --query-port=5000/sctp --zone=${default_zone}"
++assert_good "--remove-port 5000/sctp"
++assert_bad  " --query-port=5000/sctp"
++assert_good "   --add-port=222/dccp"
++assert_good " --query-port=222/dccp --zone=${default_zone}"
++assert_good "--remove-port 222/dccp"
++assert_bad  " --query-port=222/dccp"
++
+ assert_bad  "--permanent    --add-port=666" # no protocol
+ assert_bad  "--permanent    --add-port=666/dummy" # bad protocol
+ assert_good "--permanent    --add-port=666/tcp"
+@@ -348,6 +357,15 @@ assert_good "--permanent  --query-port=111-222/udp"
+ assert_good "--permanent --remove-port 111-222/udp"
+ assert_bad  "--permanent  --query-port=111-222/udp"
+ 
++assert_good "--permanent    --add-port=5000/sctp"
++assert_good "--permanent  --query-port=5000/sctp --zone=${default_zone}"
++assert_good "--permanent --remove-port 5000/sctp"
++assert_bad  "--permanent  --query-port=5000/sctp"
++assert_good "--permanent    --add-port=222/dccp"
++assert_good "--permanent  --query-port=222/dccp --zone=${default_zone}"
++assert_good "--permanent --remove-port 222/dccp"
++assert_bad  "--permanent  --query-port=222/dccp"
++
+ assert_good "   --add-port=80/tcp --add-port 443-444/udp"
+ assert_good " --query-port=80/tcp --zone=${default_zone}"
+ assert_good " --query-port=443-444/udp"
+@@ -488,6 +506,10 @@ assert_good "   --add-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
+ assert_good " --query-forward-port port=55:proto=tcp:toport=66:toaddr=7.7.7.7 --zone=${default_zone}"
+ assert_good "--remove-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
+ assert_bad  " --query-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
++assert_good "   --add-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
++assert_good " --query-forward-port port=66:proto=sctp:toport=66:toaddr=7.7.7.7 --zone=${default_zone}"
++assert_good "--remove-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
++assert_bad  " --query-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
+ 
+ assert_bad  "--permanent         --add-forward-port=666" # no protocol
+ assert_good "--permanent    --add-forward-port=port=11:proto=tcp:toport=22 --zone=${default_zone}"
+@@ -499,6 +521,10 @@ assert_good "--permanent    --add-forward-port=port=55:proto=tcp:toport=66:toadd
+ assert_good "--permanent  --query-forward-port port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
+ assert_good "--permanent --remove-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
+ assert_bad  "--permanent  --query-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
++assert_good "--permanent    --add-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
++assert_good "--permanent  --query-forward-port port=66:proto=sctp:toport=66:toaddr=7.7.7.7 --zone=${default_zone}"
++assert_good "--permanent --remove-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
++assert_bad  "--permanent  --query-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
+ 
+ assert_good "   --add-forward-port=port=88:proto=udp:toport=99 --add-forward-port port=100:proto=tcp:toport=200"
+ assert_good " --query-forward-port=port=100:proto=tcp:toport=200"
+@@ -597,6 +623,18 @@ assert_good "--permanent --icmptype=${myicmp} --query-destination=ipv4"
+ assert_good "--permanent --icmptype=${myicmp} --remove-destination=ipv4"
+ assert_bad "--permanent --icmptype=${myicmp} --query-destination=ipv4"
+ 
++# test sctp and dccp ports
++assert_good "--permanent --service=${myservice} --add-port=666/sctp"
++assert_good "--permanent --service=${myservice} --remove-port=666/sctp"
++assert_good "--permanent --service=${myservice} --remove-port 666/sctp"
++assert_bad  "--permanent --service=${myservice} --query-port=666/sctp"
++assert_good "--permanent --service=${myservice} --add-port=999/dccp"
++assert_good "--permanent --service=${myservice} --remove-port=999/dccp"
++assert_good "--permanent --service=${myservice} --remove-port 999/dccp"
++assert_bad  "--permanent --service=${myservice} --query-port=999/dccp"
++assert_good "--permanent --service=${myservice} --add-port=666/sctp"
++assert_good "--permanent --service=${myservice} --add-port=999/dccp"
++
+ # add them to zone
+ assert_good "--permanent --zone=${myzone} --add-service=${myservice}"
+ assert_good "--permanent --zone=${myzone} --add-icmp-block=${myicmp}"
+@@ -906,7 +944,9 @@ good_rules=(
+  'rule family="ipv4" source address="192.168.1.0/24" masquerade'
+  'rule family="ipv4" destination address="192.168.1.0/24" masquerade' # masquerade & destination
+  'rule family="ipv6" masquerade'
+- 'rule forward-port port="2222" to-port="22" to-addr="192.168.100.2" protocol="tcp" family="ipv4" source address="192.168.2.100"')
++ 'rule forward-port port="2222" to-port="22" to-addr="192.168.100.2" protocol="tcp" family="ipv4" source address="192.168.2.100"'
++ 'rule forward-port port="66" to-port="666" to-addr="192.168.100.2" protocol="sctp" family="ipv4" source address="192.168.2.100"'
++ 'rule forward-port port="99" to-port="999" to-addr="1::2:3:4:7" protocol="dccp" family="ipv6" source address="1:2:3:4:6::"')
+ 
+ for (( i=0;i<${#good_rules[@]};i++)); do
+   rule=${good_rules[${i}]}
+diff --git a/src/tests/firewall-offline-cmd_test.sh b/src/tests/firewall-offline-cmd_test.sh
+index ee7ffcd..f81c853 100755
+--- a/src/tests/firewall-offline-cmd_test.sh
++++ b/src/tests/firewall-offline-cmd_test.sh
+@@ -332,6 +332,15 @@ assert_good " --query-port=111-222/udp --zone=${default_zone}"
+ assert_good "--remove-port 111-222/udp"
+ assert_bad  " --query-port=111-222/udp"
+ 
++assert_good "   --add-port=5000/sctp"
++assert_good " --query-port=5000/sctp --zone=${default_zone}"
++assert_good "--remove-port 5000/sctp"
++assert_bad  " --query-port=5000/sctp"
++assert_good "   --add-port=222/dccp"
++assert_good " --query-port=222/dccp --zone=${default_zone}"
++assert_good "--remove-port 222/dccp"
++assert_bad  " --query-port=222/dccp"
++
+ assert_good "   --add-port=80/tcp --add-port 443-444/udp"
+ assert_good " --query-port=80/tcp --zone=${default_zone}"
+ assert_good " --query-port=443-444/udp"
+@@ -409,6 +418,10 @@ assert_good "   --add-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
+ assert_good " --query-forward-port port=55:proto=tcp:toport=66:toaddr=7.7.7.7 --zone=${default_zone}"
+ assert_good "--remove-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
+ assert_bad  " --query-forward-port=port=55:proto=tcp:toport=66:toaddr=7.7.7.7"
++assert_good "   --add-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
++assert_good " --query-forward-port port=66:proto=sctp:toport=66:toaddr=7.7.7.7 --zone=${default_zone}"
++assert_good "--remove-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
++assert_bad  " --query-forward-port=port=66:proto=sctp:toport=66:toaddr=7.7.7.7"
+ 
+ assert_good "   --add-forward-port=port=88:proto=udp:toport=99 --add-forward-port port=100:proto=tcp:toport=200"
+ assert_good " --query-forward-port=port=100:proto=tcp:toport=200"
+@@ -494,6 +507,18 @@ assert_good "--icmptype=${myicmp} --query-destination=ipv4"
+ assert_good "--icmptype=${myicmp} --remove-destination=ipv4"
+ assert_bad "--icmptype=${myicmp} --query-destination=ipv4"
+ 
++# test sctp and dccp ports
++assert_good "--service=${myservice} --add-port=666/sctp"
++assert_good "--service=${myservice} --remove-port=666/sctp"
++assert_good "--service=${myservice} --remove-port 666/sctp"
++assert_bad  "--service=${myservice} --query-port=666/sctp"
++assert_good "--service=${myservice} --add-port=999/dccp"
++assert_good "--service=${myservice} --remove-port=999/dccp"
++assert_good "--service=${myservice} --remove-port 999/dccp"
++assert_bad  "--service=${myservice} --query-port=999/dccp"
++assert_good "--service=${myservice} --add-port=666/sctp"
++assert_good "--service=${myservice} --add-port=999/dccp"
++
+ # add them to zone
+ assert_good "--zone=${myzone} --add-service=${myservice}"
+ assert_good "--zone=${myzone} --add-icmp-block=${myicmp}"
+@@ -688,7 +713,9 @@ good_rules=(
+  'rule family="ipv6" source address="1:2:3:4:6::" icmp-block name="redirect" log prefix="redirect" level="info" limit value="4/m"'
+  'rule family="ipv4" source address="192.168.1.0/24" masquerade'
+  'rule family="ipv6" masquerade'
+- 'rule forward-port port="2222" to-port="22" to-addr="192.168.100.2" protocol="tcp" family="ipv4" source address="192.168.2.100"')
++ 'rule forward-port port="2222" to-port="22" to-addr="192.168.100.2" protocol="tcp" family="ipv4" source address="192.168.2.100"'
++ 'rule forward-port port="66" to-port="666" to-addr="192.168.100.2" protocol="sctp" family="ipv4" source address="192.168.2.100"'
++ 'rule forward-port port="99" to-port="999" to-addr="1::2:3:4:7" protocol="dccp" family="ipv6" source address="1:2:3:4:6::"')
+ 
+ for (( i=0;i<${#good_rules[@]};i++)); do
+   rule=${good_rules[${i}]}
