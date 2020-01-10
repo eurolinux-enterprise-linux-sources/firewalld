@@ -1,0 +1,28 @@
+From 32ed5d185dec5b114e4b5e6b66d2d4efa94ed00f Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Mon, 22 Oct 2018 10:56:54 -0400
+Subject: [PATCH 3/5] tests/regression/rhbz1571957: exercise
+ log-denied=broadcast
+
+Coverage for pr #410.
+
+(cherry picked from commit fe50b6bf7e8c90f6f3174b7169646e87206f3be6)
+---
+ src/tests/regression/rhbz1571957.at | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/tests/regression/rhbz1571957.at b/src/tests/regression/rhbz1571957.at
+index 49e9b859afa4..dda5ec7a2415 100644
+--- a/src/tests/regression/rhbz1571957.at
++++ b/src/tests/regression/rhbz1571957.at
+@@ -5,5 +5,7 @@ FWD_RELOAD
+ FWD_CHECK([-q --set-log-denied=all])
+ AT_CHECK([sed -i 's/^IndividualCalls.*/IndividualCalls=yes/' ./firewalld.conf])
+ FWD_RELOAD
++FWD_CHECK([-q --set-log-denied=broadcast])
++FWD_RELOAD
+ 
+ FWD_END_TEST
+-- 
+2.18.0
+

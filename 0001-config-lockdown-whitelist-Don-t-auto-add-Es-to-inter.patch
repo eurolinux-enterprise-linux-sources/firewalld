@@ -1,0 +1,29 @@
+From c09f8ff4cbf31328f9c27d8b396f726e88118ecb Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Thu, 11 Oct 2018 19:39:29 -0400
+Subject: [PATCH 1/5] config/lockdown-whitelist: Don't auto add "-Es" to
+ interpreter
+
+Use whatever (if anything) is passed via PYTHON var.
+
+Fixes: 6d5c0c61fe04 ("scripts: Use @PYTHON@ to set interpreter")
+(cherry picked from commit 789693d5c2c0e4164f751b4bf245f4e91ebd169d)
+---
+ config/lockdown-whitelist.xml.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/config/lockdown-whitelist.xml.in b/config/lockdown-whitelist.xml.in
+index 0c6c07f2193f..e9cc4e7e985f 100644
+--- a/config/lockdown-whitelist.xml.in
++++ b/config/lockdown-whitelist.xml.in
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <whitelist>
+-  <command name="@PYTHON@ -Es /usr/bin/firewall-config"/>
++  <command name="@PYTHON@ /usr/bin/firewall-config"/>
+   <selinux context="system_u:system_r:NetworkManager_t:s0"/>
+   <selinux context="system_u:system_r:virtd_t:s0-s0:c0.c1023"/>
+   <user id="0"/>
+-- 
+2.18.0
+

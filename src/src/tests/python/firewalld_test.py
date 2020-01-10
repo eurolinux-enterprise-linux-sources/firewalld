@@ -28,7 +28,8 @@ import sys
 import time
 import unittest
 
-from firewall.config.dbus import *
+from firewall.config.dbus import DBUS_PATH, DBUS_INTERFACE, \
+                                 DBUS_INTERFACE_ZONE
 from firewall.dbus_utils import dbus_to_python
 from pprint import pprint
 
@@ -83,7 +84,8 @@ class TestFirewallD(unittest.TestCase):
 
     def test_zone_getZones(self):
         z = self.fw_zone.getZones()
-        print ("\nZones:"); pprint(dbus_to_python(z))
+        print ("\nZones:")
+        pprint(dbus_to_python(z))
 
     def test_zone_add_remove_queryInterface(self):
         interface = "foo"

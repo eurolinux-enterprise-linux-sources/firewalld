@@ -1,0 +1,30 @@
+From 44fc2d750bc0382d5de6ff5f6711f247b6f10847 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Wed, 5 Dec 2018 19:11:06 -0500
+Subject: [PATCH 07/23] nftables: fix ipv6 rich rule forward-ports
+
+The were mistakenly being added to the ipv4 nat tables as well.
+
+Fixes: #422
+Fixes: b630abd8e901 ("backend: introduce nftables support")
+(cherry picked from commit 628657cdafa7ba3217fb031c748f5a7d32924c90)
+---
+ src/firewall/core/nftables.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/firewall/core/nftables.py b/src/firewall/core/nftables.py
+index 00a02ad149e5..a1cb2c474737 100644
+--- a/src/firewall/core/nftables.py
++++ b/src/firewall/core/nftables.py
+@@ -980,7 +980,7 @@ class nftables(object):
+            or toaddr and check_single_address("ipv6", toaddr)):
+             rules.extend(self._build_zone_forward_port_nat_rules(enable, zone,
+                                 protocol, mark_fragment, toaddr, toport, "ip6"))
+-        if rich_rule and (rich_rule.family and rich_rule.family == "ipv4"
++        elif rich_rule and (rich_rule.family and rich_rule.family == "ipv4"
+            or toaddr and check_single_address("ipv4", toaddr)):
+             rules.extend(self._build_zone_forward_port_nat_rules(enable, zone,
+                                 protocol, mark_fragment, toaddr, toport, "ip"))
+-- 
+2.20.1
+

@@ -1,0 +1,39 @@
+From 1bff55e87dd4a65613222e437f794468b2f70048 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Mon, 18 Mar 2019 15:09:19 -0400
+Subject: [PATCH 22/23] fw_zone: forward-ports: only enable IP forwarding if
+ toaddr used
+
+Fixes: #335
+Fixes: rhbz 1679610
+(cherry picked from commit 01ad269d475f19048085e15178806671a83f6d44)
+---
+ src/firewall/core/fw_zone.py | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/firewall/core/fw_zone.py b/src/firewall/core/fw_zone.py
+index db90c32be540..d5eafb863439 100644
+--- a/src/firewall/core/fw_zone.py
++++ b/src/firewall/core/fw_zone.py
+@@ -1702,7 +1702,7 @@ class FirewallZone(object):
+                 for ipv in ipvs:
+                     if backend.is_ipv_supported(ipv):
+                         self.check_forward_port(ipv, port, protocol, toport, toaddr)
+-                    if enable:
++                    if toaddr and enable:
+                         zone_transaction.add_post(enable_ip_forwarding, ipv)
+ 
+                 if enable:
+@@ -1914,7 +1914,8 @@ class FirewallZone(object):
+             zone_transaction.add_chain("nat", "PREROUTING")
+             zone_transaction.add_chain("filter", filter_chain)
+ 
+-        zone_transaction.add_post(enable_ip_forwarding, ipv)
++        if toaddr and enable:
++            zone_transaction.add_post(enable_ip_forwarding, ipv)
+         backend = self._fw.get_backend_by_ipv(ipv)
+         rules = backend.build_zone_forward_port_rules(
+                             enable, zone, filter_chain, port, protocol, toport,
+-- 
+2.20.1
+

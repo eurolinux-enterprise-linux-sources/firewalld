@@ -1,0 +1,51 @@
+From bc7f0b527730d981ae76aac24c253b7c513861c0 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Wed, 14 Nov 2018 12:11:24 -0500
+Subject: [PATCH] remove cockpit service definition
+
+---
+ config/Makefile.am          | 1 -
+ config/services/cockpit.xml | 6 ------
+ po/POTFILES.in              | 1 -
+ 3 files changed, 8 deletions(-)
+ delete mode 100644 config/services/cockpit.xml
+
+diff --git a/config/Makefile.am b/config/Makefile.am
+index 7048d2ee5c0b..0a3e228bff74 100644
+--- a/config/Makefile.am
++++ b/config/Makefile.am
+@@ -130,7 +130,6 @@ CONFIG_FILES = \
+ 	services/ceph-mon.xml \
+ 	services/ceph.xml \
+ 	services/cfengine.xml \
+-	services/cockpit.xml \
+ 	services/condor-collector.xml \
+ 	services/ctdb.xml \
+ 	services/dhcpv6-client.xml \
+diff --git a/config/services/cockpit.xml b/config/services/cockpit.xml
+deleted file mode 100644
+index 486b5eb75e11..000000000000
+--- a/config/services/cockpit.xml
++++ /dev/null
+@@ -1,6 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<service>
+-  <short>Cockpit</short>
+-  <description>Cockpit lets you access and configure your server remotely.</description>
+-  <port protocol="tcp" port="9090"/>
+-</service>
+diff --git a/po/POTFILES.in b/po/POTFILES.in
+index 032bb8c14fd2..dd7aa7d82e3a 100644
+--- a/po/POTFILES.in
++++ b/po/POTFILES.in
+@@ -63,7 +63,6 @@ config/services/bitcoin.xml
+ config/services/ceph-mon.xml
+ config/services/ceph.xml
+ config/services/cfengine.xml
+-config/services/cockpit.xml
+ config/services/condor-collector.xml
+ config/services/ctdb.xml
+ config/services/dhcpv6-client.xml
+-- 
+2.18.0
+

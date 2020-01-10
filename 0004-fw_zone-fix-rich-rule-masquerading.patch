@@ -1,0 +1,29 @@
+From c2340c41711817d7ace4a85aad62e9d80936cb31 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Wed, 5 Dec 2018 13:09:28 -0500
+Subject: [PATCH 04/23] fw_zone: fix rich rule masquerading
+
+We weren't passing the rich rule to the backend so filtering on
+source/destination would not work.
+
+(cherry picked from commit 14acf26afe09ff9092bebbfc7ffe718b1758c573)
+---
+ src/firewall/core/fw_zone.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/firewall/core/fw_zone.py b/src/firewall/core/fw_zone.py
+index ca90f7fba0d4..816fa50340b3 100644
+--- a/src/firewall/core/fw_zone.py
++++ b/src/firewall/core/fw_zone.py
+@@ -1690,7 +1690,7 @@ class FirewallZone(object):
+                         if backend.is_ipv_supported(ipv):
+                             zone_transaction.add_post(enable_ip_forwarding, ipv)
+ 
+-                rules = backend.build_zone_masquerade_rules(enable, zone)
++                rules = backend.build_zone_masquerade_rules(enable, zone, rule)
+                 zone_transaction.add_rules(backend, rules)
+ 
+             # FORWARD PORT
+-- 
+2.20.1
+

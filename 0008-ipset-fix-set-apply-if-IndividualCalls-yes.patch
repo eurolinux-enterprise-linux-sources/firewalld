@@ -1,0 +1,82 @@
+From bcde371c52738a8be5981d87b2fc17ca1f3456ec Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Tue, 11 Dec 2018 11:32:54 -0500
+Subject: [PATCH 08/23] ipset: fix set apply if IndividualCalls=yes
+
+Fixes: rhbz 1644834
+Fixes: e6188ec98ff4 ("FirewallIPSet: Support restore in apply_ipsets, use it in Firewall")
+(cherry picked from commit 4157393136bbaff53e812029376b2a0a5113cedb)
+---
+ src/firewall/core/fw_ipset.py       |  2 +-
+ src/tests/regression/rhbz1601610.at | 43 +++++++++++++++++++++++++++++
+ 2 files changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/src/firewall/core/fw_ipset.py b/src/firewall/core/fw_ipset.py
+index b06a60d027a6..54ace39ea6e1 100644
+--- a/src/firewall/core/fw_ipset.py
++++ b/src/firewall/core/fw_ipset.py
+@@ -125,7 +125,7 @@ class FirewallIPSet(object):
+                         raise FirewallError(errors.COMMAND_FAILED, msg)
+                     else:
+                         obj.applied = True
+-                        if "timeout" not in obj.options or \
++                        if "timeout" in obj.options and \
+                            obj.options["timeout"] != "0":
+                             # no entries visible for ipsets with timeout
+                             continue
+diff --git a/src/tests/regression/rhbz1601610.at b/src/tests/regression/rhbz1601610.at
+index 0676bb82e31c..5ba0cee44be0 100644
+--- a/src/tests/regression/rhbz1601610.at
++++ b/src/tests/regression/rhbz1601610.at
+@@ -57,5 +57,48 @@ FWD_CHECK([-q --permanent --ipset=foobar --remove-entry=10.1.1.0/22])
+ FWD_CHECK([--permanent --ipset=foobar --get-entries], 0, [
+ ])
+ 
++dnl rhbz 1644834
++FWD_CHECK([-q --ipset=foobar --add-entry=10.1.0.0/16])
++FWD_CHECK([-q --runtime-to-permanent])
++FWD_RELOAD
++m4_if(nftables, FIREWALL_BACKEND, [
++NFT_LIST_SET([foobar], 0, [dnl
++table inet firewalld {
++set foobar {
++type ipv4_addr
++flags interval
++elements = { 10.1.0.0/16, 10.2.0.0/22 }
++}
++}
++])], [
++IPSET_LIST_SET([foobar], 0, [dnl
++Name: foobar
++Type: hash:net
++Members:
++10.1.0.0/16
++10.2.0.0/22
++])])
++
++dnl rhbz 1644834, again with IndividualCalls=yes
++AT_CHECK([sed -i 's/^IndividualCalls.*/IndividualCalls=yes/' ./firewalld.conf])
++FWD_RELOAD
++m4_if(nftables, FIREWALL_BACKEND, [
++NFT_LIST_SET([foobar], 0, [dnl
++table inet firewalld {
++set foobar {
++type ipv4_addr
++flags interval
++elements = { 10.1.0.0/16, 10.2.0.0/22 }
++}
++}
++])], [
++IPSET_LIST_SET([foobar], 0, [dnl
++Name: foobar
++Type: hash:net
++Members:
++10.1.0.0/16
++10.2.0.0/22
++])])
++
+ FWD_END_TEST([-e '/ERROR: COMMAND_FAILED:.*already added.*/d'dnl
+               -e '/ERROR: COMMAND_FAILED:.*element.*exists/d'])
+-- 
+2.20.1
+

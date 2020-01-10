@@ -1,0 +1,80 @@
+From 3c59fd09783cfafc0e624805c9a6788054bb5202 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Mon, 18 Mar 2019 15:22:56 -0400
+Subject: [PATCH 23/23] tests/regression: coverage for enabling IP forwarding
+ via forward-ports
+
+Coverage for issue 335 and rhbz 1679610.
+
+(cherry picked from commit 84e290a3faf1b0a2f7cd3521f8395cdedb57bf30)
+---
+ src/tests/regression.at       |  1 +
+ src/tests/regression/gh335.at | 47 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 48 insertions(+)
+ create mode 100644 src/tests/regression/gh335.at
+
+diff --git a/src/tests/regression.at b/src/tests/regression.at
+index 38e266021416..36e10eeb52d5 100644
+--- a/src/tests/regression.at
++++ b/src/tests/regression.at
+@@ -15,3 +15,4 @@ m4_include([regression/rhbz1404076.at])
+ m4_include([regression/gh366.at])
+ m4_include([regression/rhbz1601610.at])
+ m4_include([regression/gh303.at])
++m4_include([regression/gh335.at])
+diff --git a/src/tests/regression/gh335.at b/src/tests/regression/gh335.at
+new file mode 100644
+index 000000000000..901e2fa04f69
+--- /dev/null
++++ b/src/tests/regression/gh335.at
+@@ -0,0 +1,47 @@
++FWD_START_TEST([forward-port toaddr enables IP forwarding])
++
++NS_CHECK([sysctl -w net.ipv4.conf.all.forwarding=0], 0, [ignore], [ignore])
++NS_CHECK([sysctl -w net.ipv6.conf.all.forwarding=0], 0, [ignore], [ignore])
++FWD_CHECK([-q --add-forward-port=port=12345:proto=tcp:toaddr=10.10.10.10])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 0, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++FWD_RELOAD
++
++NS_CHECK([sysctl -w net.ipv4.conf.all.forwarding=0], 0, [ignore], [ignore])
++NS_CHECK([sysctl -w net.ipv6.conf.all.forwarding=0], 0, [ignore], [ignore])
++FWD_CHECK([-q --add-forward-port=port=12345:proto=tcp:toport=54321:toaddr="1234:5678::4321"])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 0, [ignore], [ignore])
++FWD_RELOAD
++
++NS_CHECK([sysctl -w net.ipv4.conf.all.forwarding=0], 0, [ignore], [ignore])
++NS_CHECK([sysctl -w net.ipv6.conf.all.forwarding=0], 0, [ignore], [ignore])
++FWD_CHECK([-q --add-rich-rule='rule family=ipv4 forward-port port="12345" protocol="tcp" to-port="54321" to-addr="10.10.10.10"'])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 0, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++FWD_RELOAD
++
++NS_CHECK([sysctl -w net.ipv4.conf.all.forwarding=0], 0, [ignore], [ignore])
++NS_CHECK([sysctl -w net.ipv6.conf.all.forwarding=0], 0, [ignore], [ignore])
++FWD_CHECK([-q --add-rich-rule='rule family=ipv6 forward-port port="12345" protocol="tcp" to-port="54321" to-addr="1234:5678::4321"'])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 0, [ignore], [ignore])
++FWD_RELOAD
++
++dnl following tests should _not_ enable IP forwarding
++NS_CHECK([sysctl -w net.ipv4.conf.all.forwarding=0], 0, [ignore], [ignore])
++NS_CHECK([sysctl -w net.ipv6.conf.all.forwarding=0], 0, [ignore], [ignore])
++
++FWD_CHECK([-q --add-forward-port=port=12345:proto=tcp:toport=54321])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++
++FWD_CHECK([-q --add-rich-rule='rule family=ipv4 forward-port port="12345" protocol="tcp" to-port="54321"'])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++
++FWD_CHECK([-q --add-rich-rule='rule family=ipv6 forward-port port="12345" protocol="tcp" to-port="54321"'])
++NS_CHECK([[sysctl -a |grep "net.ipv4.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++NS_CHECK([[sysctl -a |grep "net.ipv6.conf.all.forwarding[ ]*=[ ]*1"]], 1, [ignore], [ignore])
++
++FWD_END_TEST
+-- 
+2.20.1
+

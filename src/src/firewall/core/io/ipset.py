@@ -320,6 +320,8 @@ class ipset_ContentHandler(IO_Object_ContentHandler):
         self.item.parser_check_element_attrs(name, attrs)
         if name == "ipset":
             if "type" in attrs:
+                if attrs["type"] not in IPSET_TYPES:
+                    raise FirewallError(errors.INVALID_TYPE, "%s" % attrs["type"])
                 self.item.type = attrs["type"]
             if "version" in attrs:
                 self.item.version = attrs["version"]
@@ -388,9 +390,11 @@ def ipset_reader(filename, path):
     parser = sax.make_parser()
     parser.setContentHandler(handler)
     name = "%s/%s" % (path, filename)
-    with open(name, "r") as f:
+    with open(name, "rb") as f:
+        source = sax.InputSource(None)
+        source.setByteStream(f)
         try:
-            parser.parse(f)
+            parser.parse(source)
         except sax.SAXParseException as msg:
             raise FirewallError(errors.INVALID_IPSET,
                                 "not a valid ipset file: %s" % \

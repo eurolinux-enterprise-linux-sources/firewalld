@@ -1,0 +1,293 @@
+From 2361184479832ac8f2754822e1e5d4de55c4898c Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Wed, 14 Nov 2018 11:42:17 -0500
+Subject: [PATCH 1/4] remove ability to use nftables backend
+
+---
+ config/firewalld.conf                  |  7 -------
+ configure.ac                           | 10 ----------
+ doc/xml/firewalld.conf.xml             | 14 --------------
+ doc/xml/firewalld.dbus.xml             | 10 ----------
+ src/firewall/config/__init__.py.in     |  3 +--
+ src/firewall/core/fw.py                |  5 -----
+ src/firewall/core/io/firewalld_conf.py | 11 +----------
+ src/firewall/server/config.py          | 19 +++----------------
+ src/tests/dbus/firewalld.conf.at       |  2 --
+ src/tests/functions.at                 |  3 ---
+ src/tests/testsuite.at                 |  2 +-
+ 11 files changed, 6 insertions(+), 80 deletions(-)
+
+diff --git a/config/firewalld.conf b/config/firewalld.conf
+index b53c0aa50c53..63df409bf567 100644
+--- a/config/firewalld.conf
++++ b/config/firewalld.conf
+@@ -55,10 +55,3 @@ LogDenied=off
+ # will be used. Possible values are: yes, no and system.
+ # Default: system
+ AutomaticHelpers=system
+-
+-# FirewallBackend
+-# Selects the firewall backend implementation.
+-# Choices are:
+-#	- nftables (default)
+-#	- iptables (iptables, ip6tables, ebtables and ipset)
+-FirewallBackend=nftables
+diff --git a/configure.ac b/configure.ac
+index db9a39f92def..d1c365e29986 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -147,16 +147,6 @@ if test "x$IPSET" = "x"; then
+ fi
+ AC_SUBST(IPSET)
+ 
+-AC_ARG_WITH([nft],
+-       AS_HELP_STRING([--with-nft], [Path to nft (nftables) executable]),
+-       [NFT=$withval
+-       AC_MSG_NOTICE([Using for nft: $NFT])],
+-       [AC_PATH_PROG([NFT], [nft], [], [$FW_TOOLS_PATH])])
+-if test "x$NFT" = "x"; then
+-    AC_MSG_ERROR([nft was not found in $FW_TOOLS_PATH])
+-fi
+-AC_SUBST(NFT)
+-
+ #############################################################
+ 
+ AC_SUBST([GETTEXT_PACKAGE], '[PKG_NAME]')
+diff --git a/doc/xml/firewalld.conf.xml b/doc/xml/firewalld.conf.xml
+index df4b9521fd71..afb94b90937f 100644
+--- a/doc/xml/firewalld.conf.xml
++++ b/doc/xml/firewalld.conf.xml
+@@ -144,20 +144,6 @@
+ 	</listitem>
+       </varlistentry>
+ 
+-        <varlistentry>
+-            <term><option>FirewallBackend</option></term>
+-            <listitem>
+-                <para>
+-                Selects the firewall backend implementation. Possible values
+-                are; <replaceable>nftables</replaceable> (default), or
+-                <replaceable>iptables</replaceable>. This applies to all
+-                firewalld primitives. The only exception is direct and
+-                passthrough rules which always use the traditional iptables,
+-                ip6tables, and ebtables backends.
+-                </para>
+-	        </listitem>
+-        </varlistentry>
+-
+     </variablelist>
+ 
+   </refsect1>
+diff --git a/doc/xml/firewalld.dbus.xml b/doc/xml/firewalld.dbus.xml
+index 8352f96cc057..ec82d4cad077 100644
+--- a/doc/xml/firewalld.dbus.xml
++++ b/doc/xml/firewalld.dbus.xml
+@@ -2582,16 +2582,6 @@
+               </para>
+             </listitem>
+           </varlistentry>
+-          <varlistentry id="FirewallD1.config.Properties.FirewallBackend">
+-            <term>FirewallBackend - s - (rw)</term>
+-            <listitem>
+-              <para>
+-                Selects the firewalld backend for all rules except the direct
+-                interface. Valid options are; nftables, iptables. Default in
+-                nftables.
+-              </para>
+-            </listitem>
+-          </varlistentry>
+           <varlistentry id="FirewallD1.config.Properties.IPv6_rpfilter">
+             <term><parameter>IPv6_rpfilter</parameter> - s - (rw)</term>
+             <listitem><para>Indicates whether the reverse path filter test on a packet for IPv6 is enabled. If a reply to the packet would be sent via the same interface that the packet arrived on, the packet will match and be accepted, otherwise dropped.</para></listitem>
+diff --git a/src/firewall/config/__init__.py.in b/src/firewall/config/__init__.py.in
+index 955be32077e1..20e4979062d8 100644
+--- a/src/firewall/config/__init__.py.in
++++ b/src/firewall/config/__init__.py.in
+@@ -118,7 +118,6 @@ COMMANDS = {
+ 
+ LOG_DENIED_VALUES = [ "all", "unicast", "broadcast", "multicast", "off" ]
+ AUTOMATIC_HELPERS_VALUES = [ "yes", "no", "system" ]
+-FIREWALL_BACKEND_VALUES = [ "nftables", "iptables" ]
+ 
+ # fallbacks: will be overloaded by firewalld.conf
+ FALLBACK_ZONE = "public"
+@@ -129,4 +128,4 @@ FALLBACK_IPV6_RPFILTER = True
+ FALLBACK_INDIVIDUAL_CALLS = False
+ FALLBACK_LOG_DENIED = "off"
+ FALLBACK_AUTOMATIC_HELPERS = "system"
+-FALLBACK_FIREWALL_BACKEND = "nftables"
++FALLBACK_FIREWALL_BACKEND = "iptables"
+diff --git a/src/firewall/core/fw.py b/src/firewall/core/fw.py
+index 9be13a5c1313..abb25f0c3e72 100644
+--- a/src/firewall/core/fw.py
++++ b/src/firewall/core/fw.py
+@@ -293,11 +293,6 @@ class Firewall(object):
+                     log.debug1("AutomaticHelpers is set to '%s'",
+                                self._automatic_helpers)
+ 
+-            if self._firewalld_conf.get("FirewallBackend"):
+-                self._firewall_backend = self._firewalld_conf.get("FirewallBackend")
+-                log.debug1("FirewallBackend is set to '%s'",
+-                           self._firewall_backend)
+-
+         self.config.set_firewalld_conf(copy.deepcopy(self._firewalld_conf))
+ 
+         self._select_firewall_backend(self._firewall_backend)
+diff --git a/src/firewall/core/io/firewalld_conf.py b/src/firewall/core/io/firewalld_conf.py
+index 4d57bad693c1..9aee2dc6f9b7 100644
+--- a/src/firewall/core/io/firewalld_conf.py
++++ b/src/firewall/core/io/firewalld_conf.py
+@@ -30,7 +30,7 @@ from firewall.functions import b2u, u2b, PY2
+ 
+ valid_keys = [ "DefaultZone", "MinimalMark", "CleanupOnExit", "Lockdown", 
+                "IPv6_rpfilter", "IndividualCalls", "LogDenied",
+-               "AutomaticHelpers", "FirewallBackend" ]
++               "AutomaticHelpers" ]
+ 
+ class firewalld_conf(object):
+     def __init__(self, filename):
+@@ -79,7 +79,6 @@ class firewalld_conf(object):
+             self.set("IndividualCalls", "yes" if config.FALLBACK_INDIVIDUAL_CALLS else "no")
+             self.set("LogDenied", config.FALLBACK_LOG_DENIED)
+             self.set("AutomaticHelpers", config.FALLBACK_AUTOMATIC_HELPERS)
+-            self.set("FirewallBackend", config.FALLBACK_FIREWALL_BACKEND)
+             raise
+ 
+         for line in f:
+@@ -175,14 +174,6 @@ class firewalld_conf(object):
+                             config.FALLBACK_AUTOMATIC_HELPERS)
+             self.set("AutomaticHelpers", str(config.FALLBACK_AUTOMATIC_HELPERS))
+ 
+-        value = self.get("FirewallBackend")
+-        if not value or value.lower() not in config.FIREWALL_BACKEND_VALUES:
+-            if value is not None:
+-                log.warning("FirewallBackend '%s' is not valid, using default "
+-                            "value %s", value if value else '',
+-                            config.FALLBACK_FIREWALL_BACKEND)
+-            self.set("FirewallBackend", str(config.FALLBACK_FIREWALL_BACKEND))
+-
+     # save to self.filename if there are key/value changes
+     def write(self):
+         if len(self._config) < 1:
+diff --git a/src/firewall/server/config.py b/src/firewall/server/config.py
+index dfc562b537eb..011052a9cabf 100644
+--- a/src/firewall/server/config.py
++++ b/src/firewall/server/config.py
+@@ -105,7 +105,6 @@ class FirewallDConfig(slip.dbus.service.Object):
+                                                 "IndividualCalls": "readwrite",
+                                                 "LogDenied": "readwrite",
+                                                 "AutomaticHelpers": "readwrite",
+-                                                "FirewallBackend": "readwrite",
+                                               })
+ 
+     @handle_exceptions
+@@ -485,7 +484,7 @@ class FirewallDConfig(slip.dbus.service.Object):
+     def _get_property(self, prop):
+         if prop not in [ "DefaultZone", "MinimalMark", "CleanupOnExit",
+                          "Lockdown", "IPv6_rpfilter", "IndividualCalls",
+-                         "LogDenied", "AutomaticHelpers", "FirewallBackend" ]:
++                         "LogDenied", "AutomaticHelpers" ]:
+             raise dbus.exceptions.DBusException(
+                 "org.freedesktop.DBus.Error.InvalidArgs: "
+                 "Property '%s' does not exist" % prop)
+@@ -526,10 +525,6 @@ class FirewallDConfig(slip.dbus.service.Object):
+             if value is None:
+                 value = config.FALLBACK_AUTOMATIC_HELPERS
+             return dbus.String(value)
+-        elif prop == "FirewallBackend":
+-            if value is None:
+-                value = config.FALLBACK_FIREWALL_BACKEND
+-            return dbus.String(value)
+ 
+     @dbus_handle_exceptions
+     def _get_dbus_property(self, prop):
+@@ -549,8 +544,6 @@ class FirewallDConfig(slip.dbus.service.Object):
+             return dbus.String(self._get_property(prop))
+         elif prop == "AutomaticHelpers":
+             return dbus.String(self._get_property(prop))
+-        elif prop == "FirewallBackend":
+-            return dbus.String(self._get_property(prop))
+         else:
+             raise dbus.exceptions.DBusException(
+                 "org.freedesktop.DBus.Error.InvalidArgs: "
+@@ -590,7 +583,7 @@ class FirewallDConfig(slip.dbus.service.Object):
+         if interface_name == config.dbus.DBUS_INTERFACE_CONFIG:
+             for x in [ "DefaultZone", "MinimalMark", "CleanupOnExit",
+                        "Lockdown", "IPv6_rpfilter", "IndividualCalls",
+-                       "LogDenied", "AutomaticHelpers", "FirewallBackend" ]:
++                       "LogDenied", "AutomaticHelpers" ]:
+                 ret[x] = self._get_property(x)
+         elif interface_name in [ config.dbus.DBUS_INTERFACE_CONFIG_DIRECT,
+                                  config.dbus.DBUS_INTERFACE_CONFIG_POLICIES ]:
+@@ -616,8 +609,7 @@ class FirewallDConfig(slip.dbus.service.Object):
+         if interface_name == config.dbus.DBUS_INTERFACE_CONFIG:
+             if property_name in [ "MinimalMark", "CleanupOnExit", "Lockdown",
+                                   "IPv6_rpfilter", "IndividualCalls",
+-                                  "LogDenied", "AutomaticHelpers",
+-                                  "FirewallBackend" ]:
++                                  "LogDenied", "AutomaticHelpers" ]:
+                 if property_name == "MinimalMark":
+                     try:
+                         int(new_value)
+@@ -646,11 +638,6 @@ class FirewallDConfig(slip.dbus.service.Object):
+                         raise FirewallError(errors.INVALID_VALUE,
+                                             "'%s' for %s" % \
+                                             (new_value, property_name))
+-                if property_name == "FirewallBackend":
+-                    if new_value not in config.FIREWALL_BACKEND_VALUES:
+-                        raise FirewallError(errors.INVALID_VALUE,
+-                                            "'%s' for %s" % \
+-                                            (new_value, property_name))
+                 self.config.get_firewalld_conf().set(property_name, new_value)
+                 self.config.get_firewalld_conf().write()
+                 self.PropertiesChanged(interface_name,
+diff --git a/src/tests/dbus/firewalld.conf.at b/src/tests/dbus/firewalld.conf.at
+index 473210de10af..3887d7ee4a7d 100644
+--- a/src/tests/dbus/firewalld.conf.at
++++ b/src/tests/dbus/firewalld.conf.at
+@@ -5,7 +5,6 @@ DBUS_GETALL([config], [config], 0, [dnl
+ string "AutomaticHelpers" : variant string "system"
+ string "CleanupOnExit" : variant string "no"
+ string "DefaultZone" : variant string "public"
+-string "FirewallBackend" : variant string "nftables"
+ m4_if(no, HOST_SUPPORTS_NFT_FIB, [dnl
+ string "IPv6_rpfilter" : variant string "no"],[dnl
+ string "IPv6_rpfilter" : variant string "yes"])
+@@ -29,7 +28,6 @@ _helper([Lockdown], [string:"yes"], [variant string "yes"])
+ _helper([LogDenied], [string:"all"], [variant string "all"])
+ _helper([IPv6_rpfilter], [string:"yes"], [variant string "yes"])
+ _helper([IndividualCalls], [string:"yes"], [variant string "yes"])
+-_helper([FirewallBackend], [string:"iptables"], [variant string "iptables"])
+ _helper([CleanupOnExit], [string:"yes"], [variant string "yes"])
+ dnl Note: DefaultZone is RO
+ m4_undefine([_helper])
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index f8ab929118e5..b95324847e5c 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -70,9 +70,6 @@ m4_define([FWD_START_TEST], [
+         dnl don't unload modules or bother cleaning up, the namespace will be deleted
+         AT_CHECK([sed -i 's/^CleanupOnExit.*/CleanupOnExit=no/' ./firewalld.conf])
+ 
+-        dnl set the appropriate backend
+-        AT_CHECK([sed -i 's/^FirewallBackend.*/FirewallBackend=FIREWALL_BACKEND/' ./firewalld.conf])
+-
+         dnl fib matching is pretty new in nftables. Don't use rpfilter on older
+         dnl kernels.
+         m4_if(nftables, FIREWALL_BACKEND, [
+diff --git a/src/tests/testsuite.at b/src/tests/testsuite.at
+index 2943d7460919..68d18c9018b8 100644
+--- a/src/tests/testsuite.at
++++ b/src/tests/testsuite.at
+@@ -10,7 +10,7 @@ m4_include([functions.at])
+ m4_include([firewall-offline-cmd.at])
+ m4_include([dbus.at])
+ 
+-m4_foreach([FIREWALL_BACKEND], [[nftables], [iptables]], [
++m4_foreach([FIREWALL_BACKEND], [[iptables]], [
+     m4_include([firewall-cmd.at])
+     m4_include([regression.at])
+     m4_include([python.at])
+-- 
+2.18.0
+

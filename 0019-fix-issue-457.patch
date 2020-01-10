@@ -1,0 +1,28 @@
+From 1be85646ad9277008dfc2e7fb48a5ca5af9a176a Mon Sep 17 00:00:00 2001
+From: Daniel Nicolai <dalanicolai@gmail.com>
+Date: Mon, 11 Feb 2019 12:16:31 +0100
+Subject: [PATCH 19/23] fix issue #457
+
+I found out I did not set a value for invert when adding the rich rule via firewall-cmd. Then I got the error as mentioned in issue #457 because the invert attribute was given a default value None. I corrected it here so that it gets the default value False. This fixed the issue for me.
+
+(cherry picked from commit 7da05eff467244f0da6a4e7c1370dd6c7605e9f4)
+---
+ src/firewall/core/rich.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/firewall/core/rich.py b/src/firewall/core/rich.py
+index 04791da612a2..ad8808556729 100644
+--- a/src/firewall/core/rich.py
++++ b/src/firewall/core/rich.py
+@@ -385,7 +385,7 @@ class Rich_Rule(object):
+                 elif element in ['not', 'NOT']:
+                     attrs['invert'] = True
+                 else:
+-                    self.source = Rich_Source(attrs.get('address'), attrs.get('mac'), attrs.get('ipset'), attrs.get('invert'))
++                    self.source = Rich_Source(attrs.get('address'), attrs.get('mac'), attrs.get('ipset'), attrs.get('invert', False))
+                     in_elements.pop() # source
+                     attrs.clear()
+                     index = index -1 # return token to input
+-- 
+2.20.1
+

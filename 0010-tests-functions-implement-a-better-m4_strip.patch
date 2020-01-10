@@ -1,0 +1,32 @@
+From dd88ab1b9b739600285793b9f33a826648a40bd6 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Tue, 6 Nov 2018 15:45:51 -0500
+Subject: [PATCH 10/23] tests/functions: implement a better m4_strip()
+
+m4sugar's version is buggy and adds a space after newlines.
+
+(cherry picked from commit f6a3116ee1df7990362bf08cc48bc05db75a4d18)
+---
+ src/tests/functions.at | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index 2910342a72be..7776938dba32 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -207,6 +207,12 @@ m4_define([TRIMV], [[sed -e '/^[ \t]*$/d']])
+ m4_define([TRIM_INTERNAL], [[sed -e 's/[ \t]\+/ /g']])
+ m4_define([TRIM_WHITESPACE], [TRIM | TRIMV | TRIM_INTERNAL])
+ 
++dnl m4sugar's m4_strip has a bug that causes it to print a space after
++dnl newlines. So implement our own suck-less version.
++m4_define([m4_strip],
++[m4_bpatsubsts([$1], [[	 ]+], [ ],
++                     [^ ?\(.*\) ?$], [\1])])
++
+ m4_define([NS_CMD], [dnl
+     env DBUS_SYSTEM_BUS_ADDRESS="CURRENT_DBUS_ADDRESS" ip netns exec CURRENT_TEST_NS $1 dnl
+ ])
+-- 
+2.20.1
+

@@ -27,14 +27,13 @@ from firewall.core.logger import log
 from firewall import errors
 from firewall.errors import FirewallError
 from firewall.fw_types import LastUpdatedOrderedDict
-from firewall.core.ipXtables import reverse_rule
 
 class SimpleFirewallTransaction(object):
     """Base class for FirewallTransaction and FirewallZoneTransaction"""
 
     def __init__(self, fw):
         self.fw = fw
-        self.rules = { } # [ ( ipv, [ rule,.. ] ),.. ]
+        self.rules = { } # [ ( backend.name, [ rule,.. ] ),.. ]
         self.pre_funcs = [ ] # [ (func, args),.. ]
         self.post_funcs = [ ] # [ (func, args),.. ]
         self.fail_funcs = [ ] # [ (func, args),.. ]
@@ -45,15 +44,19 @@ class SimpleFirewallTransaction(object):
         del self.post_funcs[:]
         del self.fail_funcs[:]
 
-    def add_rule(self, ipv, rule):
-        self.rules.setdefault(ipv, [ ]).append(rule)
+    def add_rule(self, backend, rule):
+        self.rules.setdefault(backend.name, [ ]).append(rule)
 
-    def query_rule(self, ipv, rule):
-        return ipv in self.rules and rule in self.rules[ipv]
+    def add_rules(self, backend, rules):
+        for rule in rules:
+            self.add_rule(backend, rule)
 
-    def remove_rule(self, ipv, rule):
-        if ipv in self.rules and rule in self.rules[ipv]:
-            self.rules[ipv].remove(rule)
+    def query_rule(self, backend, rule):
+        return backend.name in self.rules and rule in self.rules[backend.name]
+
+    def remove_rule(self, backend, rule):
+        if backend.name in self.rules and rule in self.rules[backend.name]:
+            self.rules[backend.name].remove(rule)
 
     def add_pre(self, func, *args):
         self.pre_funcs.append((func, args))
@@ -74,12 +77,13 @@ class SimpleFirewallTransaction(object):
 
         if not enable:
             # reverse rule order for cleanup
-            for ipv in self.rules:
-                for rule in reversed(self.rules[ipv]):
-                    rules.setdefault(ipv, [ ]).append(reverse_rule(rule))
+            for backend_name in self.rules:
+                for rule in reversed(self.rules[backend_name]):
+                    rules.setdefault(backend_name, [ ]).append(
+                        self.fw.get_backend_by_name(backend_name).reverse_rule(rule))
         else:
-            for ipv in self.rules:
-                rules.setdefault(ipv, [ ]).extend(self.rules[ipv])
+            for backend_name in self.rules:
+                rules.setdefault(backend_name, [ ]).extend(self.rules[backend_name])
 
         return rules, modules
 
@@ -95,15 +99,15 @@ class SimpleFirewallTransaction(object):
         error = False
         errorMsg = ""
         done = [ ]
-        for ipv in rules:
+        for backend_name in rules:
             try:
-                self.fw.rules(ipv, rules[ipv])
+                self.fw.rules(backend_name, rules[backend_name])
             except Exception as msg:
                 error = True
                 errorMsg = msg
                 log.error(msg)
             else:
-                done.append(ipv)
+                done.append(backend_name)
 
         # stage 2: load modules
         if not error:
@@ -118,13 +122,14 @@ class SimpleFirewallTransaction(object):
         # error case: revert rules
         if error:
             undo_rules = { }
-            for ipv in done:
-                undo_rules[ipv] = [ ]
-                for rule in reversed(rules[ipv]):
-                    undo_rules[ipv].append(reverse_rule(rule))
-            for ipv in undo_rules:
+            for backend_name in done:
+                undo_rules[backend_name] = [ ]
+                for rule in reversed(rules[backend_name]):
+                    undo_rules[backend_name].append(
+                        self.fw.get_backend_by_name(backend_name).reverse_rule(rule))
+            for backend_name in undo_rules:
                 try:
-                    self.fw.rules(ipv, undo_rules[ipv])
+                    self.fw.rules(backend_name, undo_rules[backend_name])
                 except Exception as msg:
                     log.error(msg)
             # call failure functions
@@ -176,7 +181,7 @@ class FirewallTransaction(SimpleFirewallTransaction):
     def zone_transaction(self, zone):
         if zone not in self.zone_transactions:
             self.zone_transactions[zone] = FirewallZoneTransaction(
-                self.fw, zone)
+                self.fw, zone, self)
         return self.zone_transactions[zone]
 
     def prepare(self, enable, rules=None, modules=None):
@@ -218,16 +223,27 @@ class FirewallTransaction(SimpleFirewallTransaction):
 class FirewallZoneTransaction(SimpleFirewallTransaction):
     """Zone transaction with additional chain and module interface"""
 
-    def __init__(self, fw, zone):
+    def __init__(self, fw, zone, fw_transaction=None):
         super(FirewallZoneTransaction, self).__init__(fw)
         self.zone = zone
+        self.fw_transaction = fw_transaction
         self.chains = [ ] # [ (table, chain),.. ]
         self.modules = [ ] # [ module,.. ]
 
     def clear(self):
-        super(FirewallZoneTransaction, self).clear()
-        del self.chains[:]
-        del self.modules[:]
+        # calling clear on a zone_transaction that was spawned from a
+        # FirewallTransaction needs to clear the fw_transaction and all the
+        # other zones otherwise we end up with a partially cleared transaction.
+        if self.fw_transaction:
+            super(FirewallTransaction, self.fw_transaction).clear()
+            for zone in self.fw_transaction.zone_transactions.keys():
+                super(FirewallZoneTransaction, self.fw_transaction.zone_transactions[zone]).clear()
+                del self.fw_transaction.zone_transactions[zone].chains[:]
+                del self.fw_transaction.zone_transactions[zone].modules[:]
+        else:
+            super(FirewallZoneTransaction, self).clear()
+            del self.chains[:]
+            del self.modules[:]
 
     def prepare(self, enable, rules=None, modules=None):
         log.debug4("%s.prepare(%s, %s)" % (type(self), enable, "..."))
@@ -240,6 +256,15 @@ class FirewallZoneTransaction(SimpleFirewallTransaction):
                 modules.append(module)
 
         return rules, modules
+
+    def execute(self, enable):
+        # calling execute on a zone_transaction that was spawned from a
+        # FirewallTransaction should execute the FirewallTransaction as it may
+        # have prerequisite rules
+        if self.fw_transaction:
+            self.fw_transaction.execute(enable)
+        else:
+            super(FirewallZoneTransaction, self).execute(enable)
 
     def add_chain(self, table, chain):
         table_chain = (table, chain)

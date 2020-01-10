@@ -24,11 +24,7 @@
 
 import dbus
 
-from firewall.core.base import DEFAULT_ZONE_TARGET
-from firewall import config
-from firewall.config.dbus import *
-from firewall.client import *
-from firewall.dbus_utils import dbus_to_python
+from firewall.client import FirewallClientConfig, FirewallClientZoneSettings
 
 bus = dbus.SystemBus()
 fw_config = FirewallClientConfig(bus)

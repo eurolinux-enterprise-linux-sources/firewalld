@@ -1,0 +1,54 @@
+From ff1a2d948e75c0cabafdc34db8326e05c2cc61fa Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Mon, 17 Dec 2018 14:03:09 -0500
+Subject: [PATCH 16/23] tests/functions: normalize ebtables inversion output
+
+It changed in xtables commit 5f508b76a0ce ("ebtables: use
+extrapositioned negation consistently")
+
+(cherry picked from commit 6ec2195e544dda2a923a0393bf463bf83593c322)
+---
+ src/tests/firewall-cmd.at | 4 ++--
+ src/tests/functions.at    | 5 ++++-
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/src/tests/firewall-cmd.at b/src/tests/firewall-cmd.at
+index bdd0287ebb01..bcbfe9639ef1 100644
+--- a/src/tests/firewall-cmd.at
++++ b/src/tests/firewall-cmd.at
+@@ -761,12 +761,12 @@ FWD_START_TEST([direct ebtables])
+     FWD_CHECK([--direct --add-rule eb filter mychain 999 -p IPv6 --ip6-protocol UDP --ip6-source-port ! 12345 -j DROP], 0, ignore)
+     EBTABLES_LIST_RULES([filter], [mychain], 0, [dnl
+         -p IPv6 -j DROP
+-        -p IPv6 --ip6-proto udp --ip6-sport ! 12345 -j DROP
++        -p IPv6 --ip6-proto udp ! --ip6-sport 12345 -j DROP
+         -j RETURN
+     ])
+     FWD_CHECK([--direct --remove-rule eb filter mychain 1 -p 0x86dd -j DROP], 0, ignore)
+     EBTABLES_LIST_RULES([filter], [mychain], 0, [dnl
+-        -p IPv6 --ip6-proto udp --ip6-sport ! 12345 -j DROP
++        -p IPv6 --ip6-proto udp ! --ip6-sport 12345 -j DROP
+         -j RETURN
+     ])
+ 
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index d8757c5708e9..cf72e8f69ec4 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -222,9 +222,12 @@ m4_define([NS_CHECK], [
+ ])
+ 
+ m4_define([EBTABLES_LIST_RULES], [
++    dnl ebtables commit 5f508b76a0ce change list output for inversion.
++    m4_define([EBTABLES_LIST_RULES_NORMALIZE], [[sed -e 's/\([-][-][-a-zA-Z0-9]\+\)[ ]\+[!]/! \1/g']])
+     m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
+-        NS_CHECK([ebtables --concurrent -t $1 -L $2 | TRIM_WHITESPACE | grep -v "^Bridge"], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
++        NS_CHECK([ebtables --concurrent -t $1 -L $2 | TRIM_WHITESPACE | grep -v "^Bridge" | EBTABLES_LIST_RULES_NORMALIZE], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+     ])
++    m4_undefine([EBTABLES_LIST_RULES_NORMALIZE])
+ ])
+ 
+ m4_define([IPTABLES_LIST_RULES], [
+-- 
+2.20.1
+

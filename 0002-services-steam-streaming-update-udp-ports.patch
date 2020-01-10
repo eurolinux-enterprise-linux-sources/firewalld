@@ -1,0 +1,27 @@
+From 9600ec706fa39becb71b0b97362226d72039d06c Mon Sep 17 00:00:00 2001
+From: ykgmfq <free-software@dm-poepperl.de>
+Date: Fri, 2 Nov 2018 13:58:05 +0100
+Subject: [PATCH 02/23] services/steam-streaming: update udp ports
+
+See the changelog for 2018-10-11 at https://store.steampowered.com/news/?feed=steam_client
+
+(cherry picked from commit 2d958577968b8fc3baf515939cde4e0c1e0c482f)
+---
+ config/services/steam-streaming.xml | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/config/services/steam-streaming.xml b/config/services/steam-streaming.xml
+index 0e0aca62a90e..59ca8faca9e7 100644
+--- a/config/services/steam-streaming.xml
++++ b/config/services/steam-streaming.xml
+@@ -4,6 +4,5 @@
+   <description>Steam in-home streaming allows you to play a game on one computer when the game process is actually running on another computer elsewhere in your home. Through Steam, game audio and video is captured on the remote computer and sent to the player's computer. The game input (keyboard, mouse or gamepad) is sent from the player's computer to the game process on the remote computer.</description>
+   <port protocol="tcp" port="27036"/>
+   <port protocol="tcp" port="27037"/>
+-  <port protocol="udp" port="27031"/>
+-  <port protocol="udp" port="27036"/>
++  <port protocol="udp" port="27031-27036"/>
+ </service>
+-- 
+2.20.1
+

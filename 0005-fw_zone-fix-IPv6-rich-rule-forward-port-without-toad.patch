@@ -1,0 +1,40 @@
+From 0552d4eb28bfb42f05443ef69d8c0099dd0d9b6d Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Wed, 5 Dec 2018 16:29:49 -0500
+Subject: [PATCH 05/23] fw_zone: fix IPv6 rich rule forward-port without toaddr
+
+Using a rich rule with family=ipv6 and no toaddr specified was silently
+not applying any rules.
+
+(cherry picked from commit 2210822a2450a7b9ed853593c3d88aca1c43c2fc)
+---
+ src/firewall/core/fw_zone.py | 11 ++---------
+ 1 file changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/src/firewall/core/fw_zone.py b/src/firewall/core/fw_zone.py
+index 816fa50340b3..db90c32be540 100644
+--- a/src/firewall/core/fw_zone.py
++++ b/src/firewall/core/fw_zone.py
+@@ -1702,17 +1702,10 @@ class FirewallZone(object):
+                 for ipv in ipvs:
+                     if backend.is_ipv_supported(ipv):
+                         self.check_forward_port(ipv, port, protocol, toport, toaddr)
+-
+-                if check_single_address("ipv6", toaddr):
+-                    ipv = "ipv6"
+-                else:
+-                    ipv = "ipv4"
+-
+-                if not backend.is_ipv_supported(ipv):
+-                    continue
++                    if enable:
++                        zone_transaction.add_post(enable_ip_forwarding, ipv)
+ 
+                 if enable:
+-                    zone_transaction.add_post(enable_ip_forwarding, ipv)
+                     mark_id = self._fw.new_mark()
+ 
+                 filter_chain = "INPUT" if not toaddr else "FORWARD_IN"
+-- 
+2.20.1
+

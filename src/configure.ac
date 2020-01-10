@@ -8,7 +8,7 @@ m4_define([PKG_RELEASE], m4_bpatsubst(m4_esyscmd([grep "Release:" firewalld.spec
 m4_define([PKG_TAG], m4_format(v%s, PKG_VERSION))
 
 AC_INIT(PKG_NAME,PKG_VERSION)
-AC_CONFIG_SRCDIR([src/firewalld])
+AC_CONFIG_SRCDIR([src/firewalld.in])
 AC_PREFIX_DEFAULT([/usr])
 
 AM_INIT_AUTOMAKE([1.11 tar-ustar no-define foreign dist-bzip2 no-dist-gzip])
@@ -147,6 +147,16 @@ if test "x$IPSET" = "x"; then
 fi
 AC_SUBST(IPSET)
 
+AC_ARG_WITH([nft],
+       AS_HELP_STRING([--with-nft], [Path to nft (nftables) executable]),
+       [NFT=$withval
+       AC_MSG_NOTICE([Using for nft: $NFT])],
+       [AC_PATH_PROG([NFT], [nft], [], [$FW_TOOLS_PATH])])
+if test "x$NFT" = "x"; then
+    AC_MSG_ERROR([nft was not found in $FW_TOOLS_PATH])
+fi
+AC_SUBST(NFT)
+
 #############################################################
 
 AC_SUBST([GETTEXT_PACKAGE], '[PKG_NAME]')
@@ -159,6 +169,7 @@ AC_CONFIG_COMMANDS([xsl-cleanup],,[rm -f doc/xml/transform-*.xsl])
 
 AC_CONFIG_FILES([Makefile
 		 doxygen.conf
+		 config/lockdown-whitelist.xml
 		 config/Makefile
 		 doc/Makefile
 		 doc/man/Makefile
@@ -171,4 +182,13 @@ AC_CONFIG_FILES([Makefile
 		 src/Makefile
 		 src/tests/Makefile
 		 src/icons/Makefile])
+
+m4_foreach([FILE], [[src/firewall-applet],
+                   [src/firewall-cmd],
+                   [src/firewall-offline-cmd],
+                   [src/firewall-config],
+                   [src/firewalld]],
+    [AC_CONFIG_FILES(FILE, chmod +x FILE)]
+)
+
 AC_OUTPUT

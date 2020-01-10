@@ -1,0 +1,66 @@
+From da851982df4020460fe4fa005dd99be4357ff9bd Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Fri, 2 Nov 2018 14:10:38 -0400
+Subject: [PATCH 4/5] rich rules: fix mark action
+
+They were being placed in the wrong (and nonexistent) chain. Also add
+test coverage for the "mark" action.
+
+Fixes: 7c5f5f4d12ee ("fw_zone: push rich rule generation to backend")
+Tested-by: Felix Kaechele <heffer@fedoraproject.org>
+(cherry picked from commit 5d36e0f55887c6204e07bd8095ead1ce2d535ddb)
+---
+ src/firewall/core/ipXtables.py | 4 ++--
+ src/firewall/core/nftables.py  | 4 ++--
+ src/tests/firewall-cmd.at      | 1 +
+ 3 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/firewall/core/ipXtables.py b/src/firewall/core/ipXtables.py
+index 11aebec6e05a..b98ba5228e68 100644
+--- a/src/firewall/core/ipXtables.py
++++ b/src/firewall/core/ipXtables.py
+@@ -807,10 +807,10 @@ class ip4tables(object):
+             chain = "%s_deny" % target
+             rule_action = [ "-j", "DROP" ]
+         elif type(rich_rule.action) == Rich_Mark:
+-            chain = "%s_allow" % target
+-            table = "mangle"
+             target = DEFAULT_ZONE_TARGET.format(chain=SHORTCUTS["PREROUTING"],
+                                                 zone=zone)
++            table = "mangle"
++            chain = "%s_allow" % target
+             rule_action = [ "-j", "MARK", "--set-xmark", rich_rule.action.set ]
+         else:
+             raise FirewallError(INVALID_RULE,
+diff --git a/src/firewall/core/nftables.py b/src/firewall/core/nftables.py
+index cd05b2c3137e..69236a9600c2 100644
+--- a/src/firewall/core/nftables.py
++++ b/src/firewall/core/nftables.py
+@@ -723,10 +723,10 @@ class nftables(object):
+             chain = "%s_%s_deny" % (table, target)
+             rule_action = ["drop"]
+         elif type(rich_rule.action) == Rich_Mark:
+-            table = "mangle"
+-            chain = "%s_%s_allow" % (table, target)
+             target = DEFAULT_ZONE_TARGET.format(chain=SHORTCUTS["PREROUTING"],
+                                                 zone=zone)
++            table = "mangle"
++            chain = "%s_%s_allow" % (table, target)
+             rule_action = ["meta", "mark", "set", rich_rule.action.set]
+         else:
+             raise FirewallError(INVALID_RULE,
+diff --git a/src/tests/firewall-cmd.at b/src/tests/firewall-cmd.at
+index f496b67e4a35..82ffa9f52b47 100644
+--- a/src/tests/firewall-cmd.at
++++ b/src/tests/firewall-cmd.at
+@@ -863,6 +863,7 @@ FWD_START_TEST([rich rules good])
+     rich_rule_test([rule forward-port port="66" to-port="666" to-addr="192.168.100.2" protocol="sctp" family="ipv4" source address="192.168.2.100"])
+     rich_rule_test([rule forward-port port="99" to-port="999" to-addr="1::2:3:4:7" protocol="dccp" family="ipv6" source address="1:2:3:4:6::"])
+     rich_rule_test([rule forward-port port="99" to-port="10999" to-addr="1::2:3:4:7" protocol="dccp" family="ipv6" source address="1:2:3:4:6::"])
++    rich_rule_test([rule family="ipv4" port port="222" protocol="tcp" mark set="0xff"])
+ FWD_END_TEST
+ FWD_START_TEST([rich rules audit])
+ 	CHECK_LOG_AUDIT
+-- 
+2.18.0
+

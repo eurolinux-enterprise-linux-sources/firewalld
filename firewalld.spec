@@ -7,26 +7,42 @@
 
 Summary: A firewall daemon with D-Bus interface providing a dynamic firewall
 Name: firewalld
-Version: 0.5.3
-Release: 5%{?dist}
+Version: 0.6.3
+Release: 2%{?dist}
 URL:     http://www.firewalld.org
 License: GPLv2+
 Source0: https://github.com/firewalld/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
-Patch1: firewalld-0.4.4.3-qt4_applet.patch
-Patch2: firewalld-0.4.4.3-exclude_firewallctl_rhbz#1374799.patch
-Patch3: 0001-ipset-check-type-when-parsing-ipset-definition.patch
-Patch4: 0002-firewall-core-io-functions-add-check_config.patch
-Patch5: 0003-firewall-offline-cmd-add-check-config-option.patch
-Patch6: 0004-firewall-cmd-add-check-config-option.patch
-Patch7: 0005-tests-firewall-cmd-exercise-check-config.patch
-Patch8: 0001-firewall.core.fw_nm-avoid-iterating-NM-devices-conne.patch
-Patch9: 0002-firewall.core.fw_nm-identify-the-connections-by-uuid.patch
-Patch10: 0003-firewall.core.fw_nm-ignore-generated-connections.patch
-Patch11: 0001-tests-functions-check-state-after-a-reload.patch
-Patch12: 0002-fw-on-restart-set-policy-from-same-function.patch
-Patch13: 0003-fw-if-failure-occurs-during-startup-set-state-to-FAI.patch
-Patch14: 0001-fw-if-startup-fails-on-reload-reapply-non-perm-confi.patch
-Patch15: 0002-fw-If-direct-rules-fail-to-apply-add-a-Direct-label-.patch
+Patch1: RHEL-only-qt4_applet.patch
+Patch2: RHEL-only-remove-cockpit-service-definition.patch
+Patch3: RHEL-only-tests-functions-Do-not-force-LC_ALL-C.UTF-8.patch
+Patch4: RHEL-only-remove-ability-to-use-nftables-backend.patch
+Patch5: 0001-config-lockdown-whitelist-Don-t-auto-add-Es-to-inter.patch
+Patch6: 0002-ipXtables-nftables-Fix-object-has-no-attribute-_log_.patch
+Patch7: 0003-tests-regression-rhbz1571957-exercise-log-denied-bro.patch
+Patch8: 0004-rich-rules-fix-mark-action.patch
+Patch9: 0001-update-translations.patch
+Patch10: 0002-services-steam-streaming-update-udp-ports.patch
+Patch11: 0003-nftables-fix-panic-mode-not-filtering-output-packets.patch
+Patch12: 0004-fw_zone-fix-rich-rule-masquerading.patch
+Patch13: 0005-fw_zone-fix-IPv6-rich-rule-forward-port-without-toad.patch
+Patch14: 0006-nftables-fix-rich-rule-masquerade.patch
+Patch15: 0007-nftables-fix-ipv6-rich-rule-forward-ports.patch
+Patch16: 0008-ipset-fix-set-apply-if-IndividualCalls-yes.patch
+Patch17: 0009-tests-regression-rhbz1601610-modify-test-to-satisfy-.patch
+Patch18: 0010-tests-functions-implement-a-better-m4_strip.patch
+Patch19: 0011-tests-functions-m4_strip-expected-output.patch
+Patch20: 0012-tests-functions-for-list-macros-skip-if-testing-fire.patch
+Patch21: 0013-tests-firewall-cmd-remove-redundant-checks-for-TESTI.patch
+Patch22: 0014-nftables-Allow-interfaces-with-wildcards.patch
+Patch23: 0015-tests-firewall-cmd-Coverage-for-interface-wildcardin.patch
+Patch24: 0016-tests-functions-normalize-ebtables-inversion-output.patch
+Patch25: 0017-ipXtables-simplify-rpfilter-rule-generation.patch
+Patch26: 0018-ipXtables-Avoid-inserting-rules-with-index.patch
+Patch27: 0019-fix-issue-457.patch
+Patch28: 0020-doc-note-that-forward-port-may-enable-IP-forwarding.patch
+Patch29: 0021-doc-note-that-masquerade-will-enable-IP-forwarding.patch
+Patch30: 0022-fw_zone-forward-ports-only-enable-IP-forwarding-if-t.patch
+Patch31: 0023-tests-regression-coverage-for-enabling-IP-forwarding.patch
 
 BuildArch: noarch
 BuildRequires: desktop-file-utils
@@ -142,38 +158,38 @@ firewalld.
 %if 0%{?with_python3}
 rm -rf %{py3dir}
 cp -a . %{py3dir}
-%if 0%{?use_python3}
-sed -i -e 's|/usr/bin/python -Es|%{__python3} -Es|' %{py3dir}/fix_python_shebang.sh
-sed -i 's|/usr/bin/python|%{__python3}|' %{py3dir}/config/lockdown-whitelist.xml
-%endif #0%{?use_python3}
 %endif #0%{?with_python3}
 
 %build
 autoreconf --force -v --install --symlink
-%configure --enable-sysconfig --enable-rpmmacros
+%if 0%{?use_python3}
+%configure --enable-sysconfig --enable-rpmmacros PYTHON="%{__python3} -Es"
+%else
+%configure --enable-sysconfig --enable-rpmmacros PYTHON="%{__python2} -Es"
+%endif #0%{?use_python3}
 make %{?_smp_mflags}
 
 %if 0%{?with_python3}
 pushd %{py3dir}
 autoreconf --force -v --install --symlink
-%configure --enable-sysconfig --enable-rpmmacros PYTHON=%{__python3}
+%configure --enable-sysconfig --enable-rpmmacros PYTHON="%{__python3} -Es"
 make %{?_smp_mflags}
 popd
 %endif #0%{?with_python3}
 
 %install
 %if 0%{?use_python3}
-make -C src install-nobase_dist_pythonDATA PYTHON=%{__python2} DESTDIR=%{buildroot}
+make -C src install-nobase_dist_pythonDATA DESTDIR=%{buildroot}
 %else
-make install PYTHON=%{__python2} DESTDIR=%{buildroot}
+make install DESTDIR=%{buildroot}
 %endif #0%{?use_python3}
 
 %if 0%{?with_python3}
 pushd %{py3dir}
 %if 0%{?use_python3}
-make install PYTHON=%{__python3} DESTDIR=%{buildroot}
+make install DESTDIR=%{buildroot}
 %else
-make -C src install-nobase_dist_pythonDATA PYTHON=%{__python3} DESTDIR=%{buildroot}
+make -C src install-nobase_dist_pythonDATA DESTDIR=%{buildroot}
 %endif #0%{?use_python3}
 popd
 %endif #0%{?with_python3}
@@ -238,8 +254,6 @@ fi
 %{_prefix}/lib/firewalld/services/*.xml
 %{_prefix}/lib/firewalld/zones/*.xml
 %{_prefix}/lib/firewalld/helpers/*.xml
-%{_prefix}/lib/firewalld/xmlschema/check.sh
-%{_prefix}/lib/firewalld/xmlschema/*.xsd
 %attr(0750,root,root) %dir %{_sysconfdir}/firewalld
 %config(noreplace) %{_sysconfdir}/firewalld/firewalld.conf
 %config(noreplace) %{_sysconfdir}/firewalld/lockdown-whitelist.xml
@@ -305,7 +319,6 @@ fi
 %dir %{_prefix}/lib/firewalld/ipsets
 %dir %{_prefix}/lib/firewalld/services
 %dir %{_prefix}/lib/firewalld/zones
-%dir %{_prefix}/lib/firewalld/xmlschema
 %{_rpmconfigdir}/macros.d/macros.firewalld
 
 %files -n firewall-applet
@@ -324,12 +337,23 @@ fi
 %{_datadir}/firewalld/gtk3_chooserbutton.py*
 %{_datadir}/firewalld/gtk3_niceexpander.py*
 %{_datadir}/applications/firewall-config.desktop
-%{_datadir}/appdata/firewall-config.appdata.xml
+%{_datadir}/metainfo/firewall-config.appdata.xml
 %{_datadir}/icons/hicolor/*/apps/firewall-config*.*
 %{_datadir}/glib-2.0/schemas/org.fedoraproject.FirewallConfig.gschema.xml
 %{_mandir}/man1/firewall-config*.1*
 
 %changelog
+* Tue Mar 19 2019 Eric Garver <egarver@redhat.com> - 0.6.3-2
+- backport recent upstream stable fixes
+- backport fix to enable IP forwarding only if toaddr specified
+
+* Wed Nov 14 2018 Eric Garver <egarver@redhat.com> - 0.6.3-1
+- rebase package to v0.6.3, include recent stable fixes
+- use QT4 patch for firewall-applet
+- remove cockpit service definition, cockpit package still ships their own
+- remove testsuite force of LC_ALL=C.UTF-8. RHEL-7 doesn't have C.UTF-8
+- remove nftables support
+
 * Fri Aug 17 2018 Eric Garver <egarver@redhat.com> - 0.5.3-5
 - even if startup failed, reapply non-permanent interface to zone assignments
 

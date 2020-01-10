@@ -1,0 +1,57 @@
+From 654be1666456b568e32d7ed4246cbe3644e63208 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Mon, 18 Mar 2019 15:03:35 -0400
+Subject: [PATCH 21/23] doc: note that masquerade will enable IP forwarding
+
+(cherry picked from commit 6e30285ac0621f956e55d4ae531fa1b6ed4f77d1)
+---
+ doc/xml/firewall-cmd.xml.in        | 3 +++
+ doc/xml/firewall-offline-cmd.xml   | 3 +++
+ doc/xml/firewalld.richlanguage.xml | 3 +++
+ 3 files changed, 9 insertions(+)
+
+diff --git a/doc/xml/firewall-cmd.xml.in b/doc/xml/firewall-cmd.xml.in
+index f0bb8070afb3..18d176fef239 100644
+--- a/doc/xml/firewall-cmd.xml.in
++++ b/doc/xml/firewall-cmd.xml.in
+@@ -796,6 +796,9 @@
+ 	    <para>
+ 	      For <emphasis>IPv6</emphasis> masquerading, please use the rich language.
+ 	    </para>
++	    <para>
++	      <emphasis>Note:</emphasis> IP forwarding will be implicitly enabled.
++	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+ 
+diff --git a/doc/xml/firewall-offline-cmd.xml b/doc/xml/firewall-offline-cmd.xml
+index 5070ea099f79..1ca0acf00a09 100644
+--- a/doc/xml/firewall-offline-cmd.xml
++++ b/doc/xml/firewall-offline-cmd.xml
+@@ -834,6 +834,9 @@
+ 	    <para>
+ 	      For <emphasis>IPv6</emphasis> masquerading, please use the rich language.
+ 	    </para>
++	    <para>
++	      <emphasis>Note:</emphasis> IP forwarding will be implicitly enabled.
++	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+ 
+diff --git a/doc/xml/firewalld.richlanguage.xml b/doc/xml/firewalld.richlanguage.xml
+index f2cacb50f673..0205f79d3c58 100644
+--- a/doc/xml/firewalld.richlanguage.xml
++++ b/doc/xml/firewalld.richlanguage.xml
+@@ -200,6 +200,9 @@ masquerade
+       <para>
+ 	It is not allowed to specify an action here.
+       </para>
++      <para>
++        <emphasis>Note:</emphasis> IP forwarding will be implicitly enabled.
++      </para>
+     </refsect2>
+ 
+     <refsect2>
+-- 
+2.20.1
+

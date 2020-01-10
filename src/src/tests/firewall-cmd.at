@@ -1,5 +1,5 @@
 m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
-    AT_BANNER([firewall-cmd])
+    AT_BANNER([firewall-cmd (FIREWALL_BACKEND)])
 ])
 
 FWD_START_TEST([basic options])
@@ -7,7 +7,11 @@ FWD_START_TEST([basic options])
     FWD_CHECK([--help], 0, ignore)
     FWD_CHECK([-V], 0, ignore)
     FWD_CHECK([--reload], 0, ignore)
-    FWD_CHECK([--complete-reload], 0, ignore)
+    dnl Don't test --complete-reload, it causes modules to unload and we don't
+    dnl want to do that to the testing host. The module unload _should_ be
+    dnl denied, but lets be safe and avoid it all together.
+    dnl
+    dnl FWD_CHECK([--complete-reload], 0, ignore)
     FWD_CHECK([--permanent --complete-reload], 2, ignore, ignore)
 
     FWD_CHECK([--panic-on], 0, ignore)
@@ -47,17 +51,13 @@ FWD_START_TEST([user zone])
     FWD_CHECK([--permanent --new-zone=foobar], 0, ignore)
     FWD_CHECK([--permanent --get-zones | grep foobar], 0, ignore)
     FWD_CHECK([--permanent --zone=foobar --get-target | grep default], 0, ignore)
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --zone=foobar --set-target=BAD], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --zone=foobar --set-target=BAD], 110, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --zone=foobar --set-target=BAD], 110, ignore, ignore)
     FWD_CHECK([--permanent --zone=foobar --set-target=%%REJECT%%], 0, ignore)
     FWD_CHECK([--permanent --zone=foobar --set-target=DROP], 0, ignore)
     FWD_CHECK([--permanent --zone=foobar --set-target=ACCEPT], 0, ignore)
     FWD_CHECK([--permanent --zone=foobar --get-target | grep ACCEPT], 0, ignore)
     FWD_CHECK([--permanent --zone=foobar --add-service=ssh], 0, ignore)
-FWD_END_TEST([-e '/ERROR: INVALID_TARGET: BAD/g'])
+FWD_END_TEST([-e '/ERROR: INVALID_TARGET: BAD/d'])
 
 FWD_START_TEST([zone interfaces])
     FWD_CHECK([--zone=work --add-interface=dummy], 0, ignore)
@@ -69,6 +69,8 @@ FWD_START_TEST([zone interfaces])
     FWD_CHECK([--zone=public --change-interface=dummy], 0, ignore)
     FWD_CHECK([--get-zone-of-interface=dummy], 0, [public
 ])
+    FWD_CHECK([--zone=block --add-interface=dummy1], 0, ignore)
+    FWD_CHECK([--zone=block --remove-interface=dummy1], 0, ignore)
 
     FWD_CHECK([--zone=dmz --change-zone=dummy], 0, ignore)
     FWD_CHECK([--get-zone-of-interface=dummy], 0, [dmz
@@ -92,6 +94,8 @@ FWD_START_TEST([zone interfaces])
     FWD_CHECK([--zone=dmz --get-zone-of-interface], 2, ignore, ignore)
 
     FWD_CHECK([--permanent --zone=work --add-interface=perm_dummy], 0, ignore)
+    FWD_CHECK([--permanent --zone=trusted --add-interface=perm_dummy2], 0, ignore)
+    FWD_RELOAD
     FWD_CHECK([--permanent --get-zone-of-interface=perm_dummy], 0, [work
 ])
     FWD_CHECK([--permanent --zone work --query-interface=perm_dummy], 0, ignore)
@@ -185,7 +189,7 @@ FWD_START_TEST([services])
 
     FWD_CHECK([--permanent --zone=external --add-service=dns --timeout 60], 2, ignore, ignore) dnl impossible combination
     FWD_CHECK([--permanent --zone=external --add-service dns], 0, ignore)
-    FWD_CHECK([--permanent --zone=external --list-services], 0, [ssh dns
+    FWD_CHECK([--permanent --zone=external --list-services], 0, [dns ssh
 ])
     FWD_CHECK([--permanent --zone=external --query-service dns], 0, ignore)
     m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
@@ -194,11 +198,7 @@ FWD_START_TEST([services])
         FWD_CHECK([--permanent --zone=external --remove-service=dns], 0, ignore)
     ])
     FWD_CHECK([--permanent --zone=external --query-service=dns], 1, ignore)
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --zone=external --add-service=smtpssssssss], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --zone=external --add-service=smtpssssssss], 101, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --zone=external --add-service=smtpssssssss], 101, ignore, ignore)
     FWD_CHECK([--permanent --zone=external --add-service=dns --add-interface=dummy0], 2, ignore, ignore) dnl impossible combination
 
     FWD_CHECK([--add-service=http --add-service=nfs --timeout=1h], 0, ignore)
@@ -221,11 +221,7 @@ FWD_START_TEST([services])
 FWD_END_TEST([-e '/ERROR: INVALID_SERVICE:/d'])
 
 FWD_START_TEST([user services])
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --new-service=ssh], 2, ignore, ignore) dnl already exists
-    ], [
-        FWD_CHECK([--permanent --new-service=ssh], 26, ignore, ignore) dnl already exists
-    ])
+    FWD_CHECK([--permanent --new-service=ssh], 26, ignore, ignore) dnl already exists
 
     FWD_CHECK([--permanent --new-service=foobar], 0, ignore)
     FWD_CHECK([--permanent --get-services | grep foobar], 0, ignore)
@@ -265,11 +261,7 @@ FWD_START_TEST([user services])
     FWD_CHECK([--permanent --service=foobar --query-module=ftp], 1, ignore)
 
     FWD_CHECK([--permanent --service=foobar --set-destination=ipv4], 121, ignore, ignore) dnl no address
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --service=foobar --set-destination=ipv4:foo], 2, ignore, ignore) dnl bad address
-    ], [
-        FWD_CHECK([--permanent --service=foobar --set-destination=ipv4:foo], 105, ignore, ignore) dnl bad address
-    ])
+    FWD_CHECK([--permanent --service=foobar --set-destination=ipv4:foo], 105, ignore, ignore) dnl bad address
     FWD_CHECK([--permanent --service=foobar --set-destination=ipv4:1.2.3.4], 0, ignore)
     FWD_CHECK([--permanent --service=foobar --remove-destination=ipv4], 0, ignore)
     FWD_CHECK([--permanent --service=foobar --set-destination=ipv6:fd00:dead:beef:ff0::/64], 0, ignore)
@@ -380,11 +372,7 @@ FWD_START_TEST([protocols])
     FWD_CHECK([--query-protocol=dccp], 0, ignore)
     FWD_CHECK([--remove-protocol dccp], 0, ignore)
     FWD_CHECK([--query-protocol=dccp], 1, ignore)
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --add-protocol=dummy], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --add-protocol=dummy], 103, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --add-protocol=dummy], 103, ignore, ignore)
     FWD_CHECK([--permanent --add-protocol=dccp --zone=public], 0, ignore)
     FWD_CHECK([--permanent --query-protocol=dccp], 0, ignore)
     FWD_CHECK([--permanent --remove-protocol dccp], 0, ignore)
@@ -478,11 +466,7 @@ FWD_START_TEST([ICMP block])
     FWD_CHECK([--zone=external --query-icmp-block=redirect], 0, ignore)
     FWD_CHECK([--zone=external --remove-icmp-block redirect], 0, ignore)
     FWD_CHECK([--zone=external --query-icmp-block=redirect], 1, ignore)
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --zone=external --add-icmp-block=dummyblock], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --zone=external --add-icmp-block=dummyblock], 107, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --zone=external --add-icmp-block=dummyblock], 107, ignore, ignore)
     FWD_CHECK([--permanent --zone=external --add-icmp-block=redirect], 0, ignore)
     FWD_CHECK([--permanent --zone=external --query-icmp-block=redirect], 0, ignore)
     FWD_CHECK([--permanent --zone=external --remove-icmp-block redirect], 0, ignore)
@@ -519,11 +503,7 @@ FWD_START_TEST([ICMP block])
 FWD_END_TEST([-e '/ERROR: INVALID_ICMPTYPE:/d'])
 
 FWD_START_TEST([user ICMP types])
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --new-icmptype=redirect], 2, ignore, ignore) dnl already exists
-    ], [
-        FWD_CHECK([--permanent --new-icmptype=redirect], 26, ignore, ignore) dnl already exists
-    ])
+    FWD_CHECK([--permanent --new-icmptype=redirect], 26, ignore, ignore) dnl already exists
 
     FWD_CHECK([--permanent --new-icmptype=foobar], 0, ignore)
     FWD_CHECK([--permanent --get-icmptypes | grep foobar], 0, ignore)
@@ -544,6 +524,9 @@ FWD_START_TEST([user ICMP types])
 FWD_END_TEST([-e '/NAME_CONFLICT: new_icmptype():/d'])
 
 FWD_START_TEST([ipset])
+    CHECK_IPSET
+    CHECK_IPSET_HASH_MAC
+
     FWD_CHECK([--permanent --new-ipset=foobar --type=hash:ip], 0, ignore)
     FWD_CHECK([--reload], 0, ignore)
     FWD_CHECK([--ipset=foobar --get-entries], 0, [
@@ -564,22 +547,37 @@ FWD_START_TEST([ipset])
 
     FWD_CHECK([--permanent --delete-ipset=foobar], 0, ignore)
     FWD_CHECK([--reload], 0, ignore)
+
+    dnl multi dimensional sets
+    FWD_CHECK([--permanent --new-ipset=foobar --type=hash:ip,port], 0, ignore)
+    FWD_CHECK([--permanent --ipset=foobar --add-entry=10.10.10.10,1234], 0, ignore)
+    FWD_RELOAD
+    FWD_CHECK([--ipset=foobar --add-entry=1.2.3.4,8080], 0, ignore)
+    FWD_CHECK([--permanent --delete-ipset=foobar], 0, ignore)
+    FWD_RELOAD
+
+    dnl multi dimensional set with non default protocol
+    FWD_CHECK([--permanent --new-ipset=foobar --type=hash:ip,port], 0, ignore)
+    FWD_CHECK([--permanent --ipset=foobar --add-entry=10.10.10.10,sctp:1234], 0, ignore)
+    FWD_RELOAD
+    FWD_CHECK([--ipset=foobar --add-entry=1.2.3.4,sctp:8080], 0, ignore)
+    FWD_CHECK([--permanent --delete-ipset=foobar], 0, ignore)
+    FWD_RELOAD
+
+    FWD_CHECK([--permanent --new-ipset=foobar --type=hash:mac], 0, ignore)
+    FWD_CHECK([--permanent --ipset=foobar --add-entry=12:34:56:78:90:ab], 0, ignore)
+    FWD_RELOAD
+    FWD_CHECK([--ipset=foobar --add-entry=12:34:56:78:90:ac], 0, ignore)
+    FWD_CHECK([--permanent --delete-ipset=foobar], 0, ignore)
+    FWD_RELOAD
 FWD_END_TEST([-e '/ERROR: INVALID_ENTRY: invalid address/d'])
 
 FWD_START_TEST([user helpers])
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --new-helper=foobar --module=foo], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --new-helper=foobar --module=foo], 132, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --new-helper=foobar --module=foo], 132, ignore, ignore)
     FWD_CHECK([--permanent --new-helper=foobar --module=nf_conntrack_foo], 0, ignore)
     FWD_CHECK([--permanent --get-helpers | grep foobar], 0, ignore)
     FWD_CHECK([--permanent --helper=foobar --get-family | grep ipv4], 1, ignore)
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --helper=foobar --set-family=ipv5], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --helper=foobar --set-family=ipv5], 111, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --helper=foobar --set-family=ipv5], 111, ignore, ignore)
     FWD_CHECK([--permanent --helper=foobar --set-family=ipv4], 0, ignore)
     FWD_CHECK([--permanent --helper=foobar --get-family | grep ipv4], 0, ignore)
     FWD_CHECK([--permanent --helper=foobar --set-family=], 0, ignore)
@@ -659,6 +657,21 @@ FWD_START_TEST([direct])
     FWD_CHECK([--permanent --direct --remove-chain ipv4 filter žluťoučký], 0, ignore)
     FWD_CHECK([--permanent --direct --query-chain ipv4 filter žluťoučký], 1, ignore)
 
+    dnl rhbz 1614048 - add rule to chain with _direct suffix
+    FWD_CHECK([--direct --add-rule ipv4 filter INPUT_direct 3 -j ACCEPT], 0, ignore)
+    FWD_CHECK([--direct --add-rule ipv4 filter FORWARD_direct 3 -j ACCEPT], 0, ignore)
+    FWD_CHECK([--direct --add-rule ipv4 security INPUT_direct 3 -j ACCEPT], 0, ignore)
+    FWD_CHECK([--direct --add-rule ipv4 raw PREROUTING_direct 3 -j ACCEPT], 0, ignore)
+    FWD_CHECK([--direct --add-rule ipv4 mangle PREROUTING_direct 3 -j ACCEPT], 0, ignore)
+    FWD_CHECK([--direct --add-rule ipv4 nat PREROUTING_direct 3 -j ACCEPT], 0, ignore)
+    FWD_CHECK([--permanent --direct --add-rule ipv4 filter INPUT_direct 3 -j ACCEPT], 0, ignore)
+    FWD_RELOAD
+FWD_END_TEST([-e '/ERROR: INVALID_TABLE:/d' dnl
+              -e '/WARNING: NOT_ENABLED: chain/d'])
+
+FWD_START_TEST([direct nat])
+    CHECK_NAT_COEXISTENCE
+
     m4_define([direct_rule1], [ipv4 nat OUTPUT 0 -s 1.2.3.4 -d 1.2.3.4 -p tcp --dport 80 -j REDIRECT --to-ports 81])
     m4_define([direct_rule2], [ipv4 nat OUTPUT 0 -s 1.2.3.4 -d 1.2.3.4 -p tcp --dport 80 -j REDIRECT --to-ports 82])
     FWD_CHECK([--permanent --direct --add-rule direct_rule1], 0, ignore)
@@ -676,8 +689,7 @@ FWD_START_TEST([direct])
     FWD_CHECK([--direct --get-all-rules | grep "direct_rule2"], 1, ignore)
     m4_undefine([direct_rule1])
     m4_undefine([direct_rule2])
-FWD_END_TEST([-e '/ERROR: INVALID_TABLE:/d' dnl
-              -e '/WARNING: NOT_ENABLED: chain/d'])
+FWD_END_TEST
 
 FWD_START_TEST([direct passthrough])
     AT_CHECK([if ! modprobe dummy; then exit 77; fi])
@@ -705,11 +717,7 @@ FWD_START_TEST([direct passthrough])
     FWD_CHECK([--direct --passthrough --get-chains ipv4 filter], 111, ignore, ignore)
 
     FWD_CHECK([--permanent --direct --add-passthrough ipv4], 2, ignore, ignore)
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        FWD_CHECK([--permanent --direct --add-passthrough ipv5 -nvL], 2, ignore, ignore)
-    ], [
-        FWD_CHECK([--permanent --direct --add-passthrough ipv5 -nvL], 111, ignore, ignore)
-    ])
+    FWD_CHECK([--permanent --direct --add-passthrough ipv5 -nvL], 111, ignore, ignore)
     FWD_CHECK([--permanent --direct --add-passthrough ipv4 -nvL], 0, ignore)
     FWD_CHECK([--permanent --direct --get-passthroughs ipv4 | grep "\-nvL"], 0, ignore)
     FWD_CHECK([--permanent --direct --get-all-passthroughs | grep "ipv4 \-nvL"], 0, ignore)
@@ -717,6 +725,57 @@ FWD_START_TEST([direct passthrough])
     FWD_CHECK([--permanent --direct --remove-passthrough ipv4 -nvL], 0, ignore)
     FWD_CHECK([--permanent --direct --query-passthrough ipv4 -nvL], 1, ignore, ignore)
 FWD_END_TEST([-e '/WARNING: NOT_ENABLED: passthrough/d'])
+
+FWD_START_TEST([direct ebtables])
+    FWD_CHECK([--direct --add-chain eb filter mychain], 0, ignore)
+    FWD_CHECK([--direct --get-chains eb filter | grep mychain], 0, ignore)
+    FWD_CHECK([--direct --add-rule eb filter mychain 1 -p 0x86dd -j DROP], 0, ignore)
+    FWD_CHECK([--direct --add-rule eb filter mychain 999 -p IPv6 --ip6-protocol UDP --ip6-source-port ! 12345 -j DROP], 0, ignore)
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
+    EBTABLES_LIST_RULES([filter], [mychain], 0, [dnl
+-p IPv6 -j DROP
+-p IPv6 --ip6-proto udp --ip6-sport ! 12345 -j DROP
+-j RETURN
+])
+])
+    FWD_CHECK([--direct --remove-rule eb filter mychain 1 -p 0x86dd -j DROP], 0, ignore)
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
+    EBTABLES_LIST_RULES([filter], [mychain], 0, [dnl
+-p IPv6 --ip6-proto udp --ip6-sport ! 12345 -j DROP
+-j RETURN
+])
+])
+
+    FWD_CHECK([--direct --add-rule eb filter INPUT 1 -p 0x86dd -j DROP], 0, ignore)
+    FWD_CHECK([--direct --add-rule eb filter INPUT_direct 1 -p 0x86dd -j DROP], 0, ignore)
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [dnl
+m4_if(nftables, FIREWALL_BACKEND, [dnl
+    EBTABLES_LIST_RULES([filter], [INPUT], 0, [dnl
+-p IPv6 -j DROP
+-p IPv6 -j DROP
+])], [dnl
+    EBTABLES_LIST_RULES([filter], [INPUT_direct], 0, [dnl
+-p IPv6 -j DROP
+-p IPv6 -j DROP
+-j RETURN
+])
+])
+])
+
+    FWD_CHECK([--direct --remove-rules eb filter INPUT], 0, ignore)
+    FWD_CHECK([--direct --remove-rules eb filter mychain], 0, ignore)
+
+    FWD_CHECK([--permanent --direct --add-chain eb filter mychain], 0, ignore)
+    FWD_CHECK([--permanent --direct --get-chains eb filter | grep mychain], 0, ignore)
+    FWD_CHECK([--permanent --direct --add-rule eb filter mychain 1 -p 0x86dd -j DROP], 0, ignore)
+    FWD_RELOAD
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
+    EBTABLES_LIST_RULES([filter], [mychain], 0, [dnl
+-p IPv6 -j DROP
+-j RETURN
+])
+])
+FWD_END_TEST
 
 FWD_START_TEST([lockdown])
     FWD_CHECK([--add-lockdown-whitelist-command /usr/bin/command], 0, ignore)
@@ -773,48 +832,50 @@ FWD_START_TEST([lockdown])
     FWD_CHECK([--query-lockdown], 1, ignore)
 FWD_END_TEST
 
-FWD_START_TEST([rich rules])
-    m4_define([rich_rule_test], [
-        FWD_CHECK([--add-rich-rule='$1'], 0, ignore)
-        FWD_CHECK([--query-rich-rule='$1'], 0, ignore)
-        FWD_CHECK([--remove-rich-rule='$1'], 0, ignore)
-        FWD_CHECK([--query-rich-rule='$1'], 1, ignore)
-        FWD_CHECK([--permanent --add-rich-rule='$1'], 0, ignore)
-        FWD_CHECK([--permanent --query-rich-rule='$1'], 0, ignore)
-        FWD_CHECK([--permanent --remove-rich-rule='$1'], 0, ignore)
-        FWD_CHECK([--permanent --query-rich-rule='$1'], 1, ignore)
-    ])
-    rich_rule_test([rule service name="ftp" audit limit value="1/m" accept])
+m4_define([rich_rule_test], [
+	FWD_CHECK([--add-rich-rule='$1'], 0, ignore)
+	FWD_CHECK([--query-rich-rule='$1'], 0, ignore)
+	FWD_CHECK([--remove-rich-rule='$1'], 0, ignore)
+	FWD_CHECK([--query-rich-rule='$1'], 1, ignore)
+	FWD_CHECK([--permanent --add-rich-rule='$1'], 0, ignore)
+	FWD_CHECK([--permanent --query-rich-rule='$1'], 0, ignore)
+	FWD_CHECK([--permanent --remove-rich-rule='$1'], 0, ignore)
+	FWD_CHECK([--permanent --query-rich-rule='$1'], 1, ignore)
+])
+FWD_START_TEST([rich rules good])
     rich_rule_test([rule protocol value="ah" reject])
     rich_rule_test([rule protocol value="esp" accept])
     rich_rule_test([rule protocol value="sctp" log])
-    rich_rule_test([rule family="ipv4" source address="192.168.0.0/24" service name="tftp" log prefix="tftp" level="info" limit value="1/m" accept])
-    rich_rule_test([rule family="ipv4" source not address="192.168.0.0/24" service name="dns" log prefix="dns" level="info" limit value="2/m" drop])
-    rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" service name="radius" log prefix="dns" level="info" limit value="3/m" reject type="icmp6-addr-unreachable" limit value="20/m"])
-    rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" port port="4011" protocol="tcp" log prefix="port 4011/tcp" level="info" limit value="4/m" drop])
+    rich_rule_test([rule family="ipv4" source address="192.168.0.0/24" service name="tftp" log prefix="tftp: " level="info" limit value="1/m" accept])
+    rich_rule_test([rule family="ipv4" source not address="192.168.0.0/24" service name="dns" log prefix="dns: " level="info" limit value="2/m" drop])
+    rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" service name="radius" log prefix="dns -- " level="info" limit value="3/m" reject type="icmp6-addr-unreachable" limit value="20/m"])
+    rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" port port="4011" protocol="tcp" log prefix="port 4011: " level="info" limit value="4/m" drop])
     rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" forward-port port="4011" protocol="tcp" to-port="4012" to-addr="1::2:3:4:7"])
     rich_rule_test([rule family="ipv4" destination address="1.2.3.4" forward-port port="4011" protocol="tcp" to-port="4012" to-addr="9.8.7.6"])
-    rich_rule_test([rule family="ipv4" source address="192.168.0.0/24" icmp-block name="source-quench" log prefix="source-quench" level="info" limit value="4/m"])
-    rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" icmp-block name="redirect" log prefix="redirect" level="info" limit value="4/m"])
+    rich_rule_test([rule family="ipv4" source address="192.168.0.0/24" icmp-block name="source-quench" log prefix="source-quench: " level="info" limit value="4/m"])
+    rich_rule_test([rule family="ipv6" source address="1:2:3:4:6::" icmp-block name="redirect" log prefix="redirected: " level="info" limit value="4/m"])
     rich_rule_test([rule family="ipv4" source address="192.168.1.0/24" masquerade])
+    rich_rule_test([rule family="ipv4" source address="10.1.1.0/24" destination address="192.168.1.0/24" accept])
+    rich_rule_test([rule family="ipv6" source address="1:2:3:4::/64" destination address="1:2:3:5::/64" accept])
     rich_rule_test([rule family="ipv4" destination address="192.168.1.0/24" masquerade])
     rich_rule_test([rule family="ipv6" masquerade])
     rich_rule_test([rule forward-port port="2222" to-port="22" to-addr="192.168.100.2" protocol="tcp" family="ipv4" source address="192.168.2.100"])
     rich_rule_test([rule forward-port port="66" to-port="666" to-addr="192.168.100.2" protocol="sctp" family="ipv4" source address="192.168.2.100"])
     rich_rule_test([rule forward-port port="99" to-port="999" to-addr="1::2:3:4:7" protocol="dccp" family="ipv6" source address="1:2:3:4:6::"])
     rich_rule_test([rule forward-port port="99" to-port="10999" to-addr="1::2:3:4:7" protocol="dccp" family="ipv6" source address="1:2:3:4:6::"])
-    m4_undefine([rich_rule_test])
+FWD_END_TEST
+FWD_START_TEST([rich rules audit])
+	CHECK_LOG_AUDIT
+	rich_rule_test([rule service name="ftp" audit limit value="1/m" accept])
+FWD_END_TEST
+m4_undefine([rich_rule_test])
 
-    dnl negative tests
+FWD_START_TEST([rich rules bad])
     m4_define([rich_rule_test], [
         FWD_CHECK([--add-rich-rule='$1'], $2, ignore, ignore)
         FWD_CHECK([--permanent --add-rich-rule='$1'], $2, ignore, ignore)
     ])
-    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [
-        rich_rule_test([], 2) dnl empty
-    ], [
-        rich_rule_test([], 122) dnl empty
-    ])
+    rich_rule_test([], 122) dnl empty
     rich_rule_test([family="ipv6" accept], 122) dnl no rule
     rich_rule_test([name="dns" accept], 122) dnl no rule
     rich_rule_test([protocol value="ah" reject], 122) dnl no rule
@@ -840,3 +901,377 @@ FWD_END_TEST([-e '/ERROR: INVALID_RULE:/d' dnl
               -e '/ERROR: INVALID_LOG_LEVEL: eror/d' dnl
               -e '/ERROR: MISSING_FAMILY/d' dnl
               -e '/ERROR: INVALID_LIMIT: 1\/2m/d'])
+
+FWD_START_TEST([config validation])
+    dnl default config
+    FWD_CHECK([--check-config], 0, ignore)
+
+    dnl The rest of these are negative test cases.
+
+    dnl firewalld.conf
+    AT_CHECK([cp ./firewalld.conf ./firewalld.conf.orig])
+    AT_CHECK([echo "SomeBogusField=yes" >> ./firewalld.conf])
+    FWD_CHECK([--check-config], 0, ignore, [dnl
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [dnl
+ERROR: Invalid option: 'SomeBogusField=yes'
+ERROR: Invalid option: 'SomeBogusField=yes'
+])])
+    AT_CHECK([cp ./firewalld.conf.orig ./firewalld.conf])
+
+    dnl direct
+    AT_DATA([./direct.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<direct>
+<chain table="filter" ipv="ipv7" chain="foobar"/>
+</direct>
+])
+    FWD_CHECK([--check-config], 111, ignore, ignore)
+
+    AT_DATA([./direct.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<direct>
+<rule />
+</direct>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+    AT_CHECK([rm ./direct.xml])
+
+    dnl lockdown-whitelist
+    AT_DATA([./lockdown-whitelist.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<whitelist>
+    <user uid="666"/>
+</whitelist>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./lockdown-whitelist.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<whitelist>
+    <uid id="666"/>
+</whitelist>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./lockdown-whitelist.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<whitelist>
+    <group name="foobar" />
+</whitelist>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+    AT_CHECK([rm ./lockdown-whitelist.xml])
+
+    dnl ipset
+    AT_CHECK([mkdir -p ./ipsets])
+    AT_DATA([./ipsets/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<ipset type="hash:mac">
+  <entry>12:34:56:78:90</entry>
+</ipset>
+])
+    FWD_CHECK([--check-config], 0, ignore, [dnl
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [dnl
+WARNING: INVALID_ENTRY: invalid mac address '12:34:56:78:90' in '12:34:56:78:90', ignoring.
+WARNING: INVALID_ENTRY: invalid mac address '12:34:56:78:90' in '12:34:56:78:90', ignoring.
+])])
+
+    AT_DATA([./ipsets/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<ipset type="hash:mac">
+  <entry bogus_attr="bogus">12:34:56:78:90:ab</entry>
+</ipset>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./ipsets/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<ipset type="hash:ip,bogus">
+</ipset>
+])
+    FWD_CHECK([--check-config], 119, ignore, ignore)
+    AT_CHECK([rm ./ipsets/foobar.xml])
+
+    dnl helpers
+    AT_CHECK([mkdir -p ./helpers])
+    AT_DATA([./helpers/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<helper>
+</helper>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./helpers/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<helper family="ipv7" module="nf_conntrack_ftp">
+</helper>
+])
+    FWD_CHECK([--check-config], 111, ignore, ignore)
+
+    AT_DATA([./helpers/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<helper family="ipv6" module="nf_conntrack_ftp">
+<port protocol="aoeui" port="666" />
+</helper>
+])
+    FWD_CHECK([--check-config], 103, ignore, ignore)
+    AT_CHECK([rm ./helpers/foobar.xml])
+
+    dnl icmptype
+    AT_CHECK([mkdir -p ./icmptypes])
+    AT_DATA([./icmptypes/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<bad_element />
+<icmptype>
+</icmptype>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./icmptypes/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<icmptype>
+<destination unexpected_attr="foobar" />
+</icmptype>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+    AT_CHECK([rm ./icmptypes/foobar.xml])
+
+    dnl services
+    AT_CHECK([mkdir -p ./services])
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<protocol value="aoeui" />
+</service>
+])
+    FWD_CHECK([--check-config], 103, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<protocol bad_attr="foo" />
+</service>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<bad_element />
+</service>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<module module="bad_attr" />
+</service>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<port protocol="aoeu" port="666" />
+</service>
+])
+    FWD_CHECK([--check-config], 103, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<port protocol="tcp" port="ssssssh" />
+</service>
+])
+    FWD_CHECK([--check-config], 102, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<port protocol="tcp" port="22" />
+<source-port protocol="tcp" port="sssssh" />
+</service>
+])
+    FWD_CHECK([--check-config], 102, ignore, ignore)
+
+    AT_DATA([./services/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+<destination ipv4="224.0.0.1" ipv7="1234" />
+</service>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+    AT_CHECK([rm ./services/foobar.xml])
+
+    dnl zones
+    AT_CHECK([mkdir -p ./zones])
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+])
+    FWD_CHECK([--check-config], 112, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<service name="bogus_service_name" />
+</zone>
+])
+    FWD_CHECK([--check-config], 101, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<port protocol="ipv4" />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<protocol value="thisdoesnotexist" />
+</zone>
+])
+    FWD_CHECK([--check-config], 103, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<icmp-block invalid_attr=""/>
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<icmp-type />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<masquerade value="true" />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<forward-port port="666" />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<forward-port protocol="sctppp" />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<source-port port="-1" />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<interface />
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<source />
+</zone>
+])
+    FWD_CHECK([--check-config], 0, ignore, [dnl
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [dnl
+WARNING: Invalid source: No address no ipset.
+WARNING: Invalid source: No address no ipset.
+])])
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<rule>
+<source address="10.0.0.1/24" />
+<limit />
+</rule>
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<rule family="ipv4">
+<source address="10.0.0.1/24" />
+<accept>
+<limit value="none" />
+</accept>
+</rule>
+</zone>
+])
+    FWD_CHECK([--check-config], 0, ignore, [dnl
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [dnl
+WARNING: INVALID_LIMIT: none: rule family="ipv4" source address="10.0.0.1/24" accept limit value="none"
+WARNING: INVALID_LIMIT: none: rule family="ipv4" source address="10.0.0.1/24" accept limit value="none"
+])])
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<rule>
+<source address="10.0.0.1/24" />
+<log level="super_critical" />
+</rule>
+</zone>
+])
+    FWD_CHECK([--check-config], 0, ignore, [dnl
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [dnl
+WARNING: Invalid rule: Invalid log level
+WARNING: Invalid rule: Invalid log level
+])])
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<rule family="ipv4">
+<source address="10.0.0.1/24" />
+<audit prefix="foobar" />
+</rule>
+</zone>
+])
+    FWD_CHECK([--check-config], 28, ignore, ignore)
+
+    AT_DATA([./zones/foobar.xml], [dnl
+<?xml version="1.0" encoding="utf-8"?>
+<zone>
+<rule family="ipv6">
+<source address="10.0.0.1/24" />
+<accept />
+</rule>
+</zone>
+])
+    FWD_CHECK([--check-config], 0, ignore, [dnl
+m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [dnl
+WARNING: INVALID_ADDR: 10.0.0.1/24: rule family="ipv6" source address="10.0.0.1/24" accept
+WARNING: INVALID_ADDR: 10.0.0.1/24: rule family="ipv6" source address="10.0.0.1/24" accept
+])])
+    AT_CHECK([rm ./zones/foobar.xml])
+
+FWD_END_TEST([-e '/ERROR:/d'dnl
+              -e '/WARNING:/d'])

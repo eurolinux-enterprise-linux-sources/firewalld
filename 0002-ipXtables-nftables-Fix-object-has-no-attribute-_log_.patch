@@ -1,0 +1,45 @@
+From 1148e7054b8ef9bbd808fd0fb739fb3204b3265b Mon Sep 17 00:00:00 2001
+From: Federico Cuello <fedux@fedux.com.ar>
+Date: Sat, 20 Oct 2018 15:47:28 +0200
+Subject: [PATCH 2/5] ipXtables/nftables: Fix "object has no attribute
+ '_log_denied'"
+
+This fixes nftables and ipXtables (when IndividualCalls=yes),
+as _log_denied is not an attribute of the class but a param.
+
+(cherry picked from commit 93824072768f989991a11069ac75f1cd3d56ae34)
+---
+ src/firewall/core/ipXtables.py | 3 +--
+ src/firewall/core/nftables.py  | 2 +-
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/src/firewall/core/ipXtables.py b/src/firewall/core/ipXtables.py
+index 02a518d2938d..11aebec6e05a 100644
+--- a/src/firewall/core/ipXtables.py
++++ b/src/firewall/core/ipXtables.py
+@@ -492,8 +492,7 @@ class ip4tables(object):
+             if log_denied == "off":
+                 return ""
+             if log_denied in [ "unicast", "broadcast", "multicast" ]:
+-                rule[i:i+1] = [ "-m", "pkttype", "--pkt-type",
+-                                self._log_denied ]
++                rule[i:i+1] = [ "-m", "pkttype", "--pkt-type", log_denied ]
+             else:
+                 rule.pop(i)
+ 
+diff --git a/src/firewall/core/nftables.py b/src/firewall/core/nftables.py
+index 3c871069f7e6..cd05b2c3137e 100644
+--- a/src/firewall/core/nftables.py
++++ b/src/firewall/core/nftables.py
+@@ -290,7 +290,7 @@ class nftables(object):
+             if log_denied == "off":
+                 return ""
+             if log_denied in ["unicast", "broadcast", "multicast"]:
+-                rule[i:i+1] = ["pkttype", self._log_denied]
++                rule[i:i+1] = ["pkttype", log_denied]
+             else:
+                 rule.pop(i)
+ 
+-- 
+2.18.0
+

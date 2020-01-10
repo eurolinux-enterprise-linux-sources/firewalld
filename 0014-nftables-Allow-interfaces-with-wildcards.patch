@@ -1,0 +1,41 @@
+From 64d043d8a4fcb1aa9ab0dcfc7c52061cb080e6b9 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Mon, 17 Dec 2018 12:53:30 -0500
+Subject: [PATCH 14/23] nftables: Allow interfaces with wildcards
+
+Fixes: rhbz 1644025
+(cherry picked from commit aa01eda4c87dd7b5c1f1e884fc7332c6317fed02)
+---
+ src/firewall/core/nftables.py | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/firewall/core/nftables.py b/src/firewall/core/nftables.py
+index a1cb2c474737..50303e94ed7b 100644
+--- a/src/firewall/core/nftables.py
++++ b/src/firewall/core/nftables.py
+@@ -475,6 +475,9 @@ class nftables(object):
+             "OUTPUT": "oifname",
+         }[chain]
+ 
++        if interface[len(interface)-1] == "+":
++            interface = interface[:len(interface)-1] + "*"
++
+         target = DEFAULT_ZONE_TARGET.format(chain=SHORTCUTS[chain], zone=zone)
+         if zone_target == DEFAULT_ZONE_TARGET:
+             action = "goto"
+@@ -486,10 +489,10 @@ class nftables(object):
+             rule = ["add", "rule", family, "%s" % TABLE_NAME, "%s_%s_ZONES" % (table, chain)]
+         else:
+             rule = ["delete", "rule", family, "%s" % TABLE_NAME, "%s_%s_ZONES" % (table, chain)]
+-        if interface == "+":
++        if interface == "*":
+             rule += [action, "%s_%s" % (table, target)]
+         else:
+-            rule += [opt, interface, action, "%s_%s" % (table, target)]
++            rule += [opt, "\"" + interface + "\"", action, "%s_%s" % (table, target)]
+         return [rule]
+ 
+     def build_zone_source_address_rules(self, enable, zone, zone_target,
+-- 
+2.20.1
+

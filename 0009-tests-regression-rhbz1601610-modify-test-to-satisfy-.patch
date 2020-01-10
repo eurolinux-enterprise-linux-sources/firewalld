@@ -1,0 +1,76 @@
+From b23b014be322044a190acfb97c80f9e5e99c6dfe Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Thu, 13 Dec 2018 12:19:21 -0500
+Subject: [PATCH 09/23] tests/regression/rhbz1601610: modify test to satisfy
+ buggy kernel versions
+
+Older versions of nftables (kernel) had issues with overlapping sets.
+Let's use non-overlapping sets to avoid the kernel bug while still
+exercising the cases we want.
+
+This in a kernel bug that was fixed back in v4.6. nftables backend
+requires v4.18, but the CI uses a really old kernel.
+
+Kernel fix:
+e701001e7cbe ("netfilter: nft_rbtree: allow adjacent intervals with
+dynamic updates")
+
+(cherry picked from commit 7925d6ff9dde7e52efed6a28427364b30dbdc363)
+---
+ src/tests/regression/rhbz1601610.at | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/tests/regression/rhbz1601610.at b/src/tests/regression/rhbz1601610.at
+index 5ba0cee44be0..17129a541041 100644
+--- a/src/tests/regression/rhbz1601610.at
++++ b/src/tests/regression/rhbz1601610.at
+@@ -58,7 +58,7 @@ FWD_CHECK([--permanent --ipset=foobar --get-entries], 0, [
+ ])
+ 
+ dnl rhbz 1644834
+-FWD_CHECK([-q --ipset=foobar --add-entry=10.1.0.0/16])
++FWD_CHECK([-q --ipset=foobar --add-entry=10.3.0.0/22])
+ FWD_CHECK([-q --runtime-to-permanent])
+ FWD_RELOAD
+ m4_if(nftables, FIREWALL_BACKEND, [
+@@ -67,7 +67,7 @@ table inet firewalld {
+ set foobar {
+ type ipv4_addr
+ flags interval
+-elements = { 10.1.0.0/16, 10.2.0.0/22 }
++elements = { 10.2.0.0/22, 10.3.0.0/22 }
+ }
+ }
+ ])], [
+@@ -75,8 +75,8 @@ IPSET_LIST_SET([foobar], 0, [dnl
+ Name: foobar
+ Type: hash:net
+ Members:
+-10.1.0.0/16
+ 10.2.0.0/22
++10.3.0.0/22
+ ])])
+ 
+ dnl rhbz 1644834, again with IndividualCalls=yes
+@@ -88,7 +88,7 @@ table inet firewalld {
+ set foobar {
+ type ipv4_addr
+ flags interval
+-elements = { 10.1.0.0/16, 10.2.0.0/22 }
++elements = { 10.2.0.0/22, 10.3.0.0/22 }
+ }
+ }
+ ])], [
+@@ -96,8 +96,8 @@ IPSET_LIST_SET([foobar], 0, [dnl
+ Name: foobar
+ Type: hash:net
+ Members:
+-10.1.0.0/16
+ 10.2.0.0/22
++10.3.0.0/22
+ ])])
+ 
+ FWD_END_TEST([-e '/ERROR: COMMAND_FAILED:.*already added.*/d'dnl
+-- 
+2.20.1
+

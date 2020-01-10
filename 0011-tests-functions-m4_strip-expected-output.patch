@@ -1,0 +1,74 @@
+From 33f4b49ec3da8616b18677d66b46e11540dbdbfc Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Mon, 5 Nov 2018 16:59:00 -0500
+Subject: [PATCH 11/23] tests/functions: m4_strip expected output
+
+This is so we can indent them in tests instead of starting at column 0.
+
+(cherry picked from commit 1b64149267f316fdbe38ecd185b74e5dc4f67ac2)
+---
+ src/tests/functions.at | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index 7776938dba32..7cb8ea1a01e4 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -222,30 +222,30 @@ m4_define([NS_CHECK], [
+ ])
+ 
+ m4_define([EBTABLES_LIST_RULES], [
+-    NS_CHECK([ebtables --concurrent -t $1 -L $2 | TRIM_WHITESPACE | grep -v "^Bridge"], [$3], [$4], [$5], [$6], [$7])
++    NS_CHECK([ebtables --concurrent -t $1 -L $2 | TRIM_WHITESPACE | grep -v "^Bridge"], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+ ])
+ 
+ m4_define([IPTABLES_LIST_RULES], [
+-    NS_CHECK([iptables -w -n -t $1 -L $2 | TRIM_WHITESPACE | tail -n +3], [$3], [$4], [$5], [$6], [$7])
++    NS_CHECK([iptables -w -n -t $1 -L $2 | TRIM_WHITESPACE | tail -n +3], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+ ])
+ 
+ m4_define([IP6TABLES_LIST_RULES], [
+-    NS_CHECK([ip6tables -w -n -t $1 -L $2 | TRIM_WHITESPACE | tail -n +3], [$3], [$4], [$5], [$6], [$7])
++    NS_CHECK([ip6tables -w -n -t $1 -L $2 | TRIM_WHITESPACE | tail -n +3], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+ ])
+ 
+ m4_define([NFT_LIST_RULES], [
+-    NS_CHECK([nft -nn list chain $1 firewalld $2 | TRIM_WHITESPACE], [$3], [$4], [$5], [$6], [$7])
++    NS_CHECK([nft -nn list chain $1 firewalld $2 | TRIM_WHITESPACE], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+ ])
+ 
+ m4_define([IPSET_LIST_SET], [
+     NS_CHECK([ipset list $1 | TRIM_WHITESPACE |dnl
+               grep -v "^\(Revision\|Header\|Size\|References\|Number\)" |dnl
+               awk 'NR <= 3; NR > 3 {print | "sort"}'],
+-             [$2], [$3], [$4], [$5], [$6])
++             [$2], [m4_strip([$3])], [m4_strip([$4])], [$5], [$6])
+ ])
+ 
+ m4_define([NFT_LIST_SET], [
+-    NS_CHECK([nft -nn list set inet firewalld $1 | TRIM_WHITESPACE], [$2], [$3], [$4], [$5], [$6])
++    NS_CHECK([nft -nn list set inet firewalld $1 | TRIM_WHITESPACE], [$2], [m4_strip([$3])], [m4_strip([$4])], [$5], [$6])
+ ])
+ 
+ m4_define([DBUS_CHECK], [
+@@ -263,7 +263,7 @@ m4_define([DBUS_GETALL], [
+               /org/fedoraproject/FirewallD1/$1 dnl
+               org.freedesktop.DBus.Properties.GetAll string:"org.fedoraproject.FirewallD1.$2" dnl
+               | TRIM_WHITESPACE | DBUS_GETALL_NORMALIZE],
+-             [$3], [$4], [$5], [$6], [$7])
++             [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+ ])
+ 
+ m4_define([DBUS_GET], [
+@@ -271,7 +271,7 @@ m4_define([DBUS_GET], [
+               /org/fedoraproject/FirewallD1/$1 dnl
+               org.freedesktop.DBus.Properties.Get string:"org.fedoraproject.FirewallD1.$2" $3 dnl
+               | tail -n +2 | TRIM_WHITESPACE],
+-             [$4], [$5], [$6], [$7], [$8])
++             [$4], [m4_strip([$5])], [m4_strip([$6])], [$7], [$8])
+ ])
+ 
+ m4_define([DBUS_SET], [
+-- 
+2.20.1
+

@@ -1,0 +1,31 @@
+From 7d4a8a9177f32d51dd63f2a68a44f4bda761d05e Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Thu, 15 Nov 2018 10:00:42 -0500
+Subject: [PATCH] tests/functions: Do not force LC_ALL=C.UTF-8
+
+RHEL-7 does not support the C.UTF-8 locale.
+---
+ src/tests/functions.at | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index b95324847e5c..2910342a72be 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -50,13 +50,6 @@ m4_define([FWD_RESTART], [
+ m4_define([FWD_START_TEST], [
+     AT_SETUP([$1])
+ 
+-    dnl We test some unicode strings and autotest overrides LC_ALL=C, so set it
+-    dnl again for every test.
+-    LC_ALL="C.UTF-8"
+-    export LC_ALL
+-    LANGUAGE="C.UTF-8"
+-    export LANGUAGE
+-
+     dnl start every test with the default config
+     if test "x${FIREWALLD_DEFAULT_CONFIG}" != x ; then
+         AT_CHECK([if ! cp "${FIREWALLD_DEFAULT_CONFIG}/firewalld.conf" ./firewalld.conf; then exit 77; fi])
+-- 
+2.18.0
+

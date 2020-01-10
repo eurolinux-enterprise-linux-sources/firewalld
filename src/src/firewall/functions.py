@@ -32,8 +32,10 @@ __all__ = [ "PY2", "getPortID", "getPortRange", "portStr", "getServiceName",
             "b2u", "u2b", "u2b_if_py2" ]
 
 import socket
-import os, os.path
-import shlex, pipes
+import os
+import os.path
+import shlex
+import pipes
 import string
 import sys
 import tempfile
@@ -137,6 +139,18 @@ def portStr(port, delimiter=":"):
         return "%s" % _range
     else:
         return "%s%s%s" % (_range[0], delimiter, _range[1])
+
+def portInPortRange(port, range):
+    _port = getPortID(port)
+    _range = getPortRange(range)
+
+    if len(_range) == 1:
+        return _port == getPortID(_range[0])
+    if len(_range) == 2 and \
+       _port >= getPortID(_range[0]) and _port <= getPortID(_range[1]):
+            return True
+
+    return False
 
 def getServiceName(port, proto):
     """ Check and Get service name from port and proto string combination using socket.getservbyport
@@ -385,7 +399,6 @@ def get_nf_nat_helpers():
                     continue
                 # Else we get module alias and if "NAT helper" in "description:" line of modinfo
                 # then we add it to helpers list and goto next module
-                alias = None
                 for line in ret.split("\n"):
                     if line.startswith("description:") and "NAT helper" in line:
                         helper = module.replace("nf_nat_", "")
@@ -530,7 +543,7 @@ def joinArgs(args):
         return " ".join(pipes.quote(a) for a in args)
 
 def splitArgs(_string):
-    if PY2 and isinstance(_string, unicode):
+    if PY2 and isinstance(_string, unicode): # noqa: F821
         # Python2's shlex doesn't like unicode
         _string = u2b(_string)
         splits = shlex.split(_string)
@@ -552,6 +565,6 @@ def u2b(_string):
 
 def u2b_if_py2(_string):
     """ unicode to bytes only if Python 2"""
-    if PY2 and isinstance(_string, unicode):
+    if PY2 and isinstance(_string, unicode): # noqa: F821
         return _string.encode('UTF-8', 'replace')
     return _string

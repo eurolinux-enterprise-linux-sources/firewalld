@@ -19,9 +19,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-__all__ = [ "FirewallDirectIPTables" ]
+__all__ = [ "FirewallDirect" ]
 
-from firewall.fw_types import *
+from firewall.fw_types import LastUpdatedOrderedDict
 from firewall.core import ipXtables
 from firewall.core import ebtables
 from firewall.core.fw_transaction import FirewallTransaction
@@ -192,7 +192,7 @@ class FirewallDirect(object):
             raise FirewallError(errors.BUILTIN_CHAIN,
                                 "chain '%s' is reserved" % chain)
         if ipv in [ "ipv4", "ipv6" ]:
-            if self._fw.zone.zone_from_chain(chain) != None:
+            if self._fw.zone.zone_from_chain(chain) is not None:
                 raise FirewallError(errors.INVALID_CHAIN,
                                     "Chain '%s' is reserved" % chain)
 
@@ -317,7 +317,7 @@ class FirewallDirect(object):
 
     def passthrough(self, ipv, args):
         try:
-            return self._fw.rule(ipv, args)
+            return self._fw.rule(self._fw.get_direct_backend_by_ipv(ipv).name, args)
         except Exception as msg:
             log.debug2(msg)
             raise FirewallError(errors.COMMAND_FAILED, msg)
@@ -373,22 +373,29 @@ class FirewallDirect(object):
                 r.append(list(args))
         return r
 
-class FirewallDirectIPTables(FirewallDirect):
     def _rule(self, enable, ipv, table, chain, priority, args, transaction):
         self._check_ipv_table(ipv, table)
-        if ipv in [ "ipv4", "ipv6" ]:
+        # Do not create zone chains if we're using nftables. Only allow direct
+        # rules in the built in chains.
+        if not self._fw.nftables_enabled \
+           and ipv in [ "ipv4", "ipv6" ]:
             self._fw.zone.create_zone_base_by_chain(ipv, table, chain,
                                                     transaction)
 
         _chain = chain
 
-        if ipv in [ "ipv4", "ipv6" ]:
-            _CHAINS = ipXtables.BUILT_IN_CHAINS
-        else:
-            _CHAINS = ebtables.BUILT_IN_CHAINS
+        backend = self._fw.get_direct_backend_by_ipv(ipv)
 
-        if table in _CHAINS and chain in _CHAINS[table]:
+        # if nftables is in use, just put the direct rules in the chain
+        # specified by the user. i.e. don't append _direct.
+        if not self._fw.nftables_enabled \
+           and backend.is_chain_builtin(ipv, table, chain):
             _chain = "%s_direct" % (chain)
+        elif self._fw.nftables_enabled and chain[-7:] == "_direct" \
+             and backend.is_chain_builtin(ipv, table, chain[:-7]):
+            # strip _direct suffix. If we're using nftables we don't bother
+            # creating the *_direct chains for builtin chains.
+            _chain = chain[:-7]
 
         chain_id = (ipv, table, chain)
         rule_id = (priority, args)
@@ -455,14 +462,7 @@ class FirewallDirectIPTables(FirewallDirect):
                 index += self._rule_priority_positions[chain_id][positions[j]]
                 j += 1
 
-        rule = [ "-t", table ]
-        if enable:
-            rule += [ "-I", _chain, str(index) ]
-        else:
-            rule += [ "-D", _chain ]
-        rule += args
-
-        transaction.add_rule(ipv, rule)
+        transaction.add_rule(backend, backend.build_rule(enable, table, _chain, index, args))
 
         self._register_rule(rule_id, chain_id, priority, enable)
         transaction.add_fail(self._register_rule,
@@ -486,16 +486,8 @@ class FirewallDirectIPTables(FirewallDirect):
                                     "chain '%s' is not in '%s:%s'" % \
                                     (chain, ipv, table))
 
-        rule = [ "-t", table ]
-        if add:
-            rule.append("-N")
-        else:
-            rule.append("-X")
-        rule.append(chain)
-        if add and ipv == "eb":
-            rule += [ "-P", "RETURN" ]
-
-        transaction.add_rule(ipv, rule)
+        backend = self._fw.get_direct_backend_by_ipv(ipv)
+        transaction.add_rules(backend, backend.build_chain_rules(add, table, chain))
 
         self._register_chain(table_id, chain, add)
         transaction.add_fail(self._register_chain, table_id, chain, not add)
@@ -515,108 +507,21 @@ class FirewallDirectIPTables(FirewallDirect):
                 raise FirewallError(errors.NOT_ENABLED,
                                     "passthrough '%s', '%s'" % (ipv, args))
 
+        backend = self._fw.get_direct_backend_by_ipv(ipv)
+
         if enable:
-            self.check_passthrough(args)
+            backend.check_passthrough(args)
             # try to find out if a zone chain should be used
             if ipv in [ "ipv4", "ipv6" ]:
-                table = "filter"
-                try:
-                    i = args.index("-t")
-                except ValueError:
-                    pass
-                else:
-                    if len(args) >= i+1:
-                        table = args[i+1]
-                chain = None
-                for opt in [ "-A", "--append",
-                             "-I", "--insert",
-                             "-N", "--new-chain" ]:
-                    try:
-                        i = args.index(opt)
-                    except ValueError:
-                        pass
-                    else:
-                        if len(args) >= i+1:
-                            chain = args[i+1]
+                table, chain = backend.passthrough_parse_table_chain(args)
                 if table and chain:
                     self._fw.zone.create_zone_base_by_chain(ipv, table, chain)
             _args = args
         else:
-            _args = self.reverse_passthrough(args)
-        transaction.add_rule(ipv, _args)
+            _args = backend.reverse_passthrough(args)
+
+        transaction.add_rule(backend, _args)
 
         self._register_passthrough(ipv, tuple_args, enable)
         transaction.add_fail(self._register_passthrough, ipv, tuple_args,
                              not enable)
-
-    def check_passthrough(self, args):
-        """ Check if passthough rule is valid (only add, insert and new chain
-        rules are allowed) """
-
-        args = set(args)
-        not_allowed = set(["-C", "--check",           # check rule
-                           "-D", "--delete",          # delete rule
-                           "-R", "--replace",         # replace rule
-                           "-L", "--list",            # list rule
-                           "-S", "--list-rules",      # print rules
-                           "-F", "--flush",           # flush rules
-                           "-Z", "--zero",            # zero rules
-                           "-X", "--delete-chain",    # delete chain
-                           "-P", "--policy",          # policy
-                           "-E", "--rename-chain"])   # rename chain)
-        # intersection of args and not_allowed is not empty, i.e.
-        # something from args is not allowed
-        if len(args & not_allowed) > 0:
-            raise FirewallError(errors.INVALID_PASSTHROUGH,
-                                "arg '%s' is not allowed" %
-                                list(args & not_allowed)[0])
-
-        # args need to contain one of -A, -I, -N
-        needed = set(["-A", "--append",
-                      "-I", "--insert",
-                      "-N", "--new-chain"])
-        # empty intersection of args and needed, i.e.
-        # none from args contains any needed command
-        if len(args & needed) == 0:
-            raise FirewallError(errors.INVALID_PASSTHROUGH,
-                                "no '-A', '-I' or '-N' arg")
-
-    def reverse_passthrough(self, args):
-        """ Reverse valid passthough rule """
-
-        replace_args = {
-            # Append
-            "-A": "-D",
-            "--append": "--delete",
-            # Insert
-            "-I": "-D",
-            "--insert": "--delete",
-            # New chain
-            "-N": "-X",
-            "--new-chain": "--delete-chain",
-        }
-
-        ret_args = args[:]
-
-        for x in replace_args:
-            try:
-                idx = ret_args.index(x)
-            except ValueError:
-                continue
-
-            if x in [ "-I", "--insert" ]:
-                # With insert rulenum, then remove it if it is a number
-                # Opt at position idx, chain at position idx+1, [rulenum] at
-                # position idx+2
-                try:
-                    int(ret_args[idx+2])
-                except ValueError:
-                    pass
-                else:
-                    ret_args.pop(idx+2)
-
-            ret_args[idx] = replace_args[x]
-            return ret_args
-
-        raise FirewallError(errors.INVALID_PASSTHROUGH,
-                            "no '-A', '-I' or '-N' arg")
