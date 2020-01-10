@@ -1,0 +1,29 @@
+From 92fbe922bb4435a0cb48f8042e3ff33e8e1d0eaf Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Tue, 14 May 2019 18:30:12 -0400
+Subject: [PATCH 35/37] test: add macro IF_IPV6_SUPPORTED
+
+(cherry picked from commit d569d7239f23f443ac4c5dce843481223481ec96)
+(cherry picked from commit 781fe1a49ab1d3fea3540742c38fe6633e65d700)
+---
+ src/tests/functions.at | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index da90f9ce549b..106c71ff9920 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -365,3 +365,10 @@ m4_define([HOST_SUPPORTS_IP6TABLES], [m4_esyscmd(
+         echo -n "no"
+     fi
+ )])
++
++m4_define([IF_IPV6_SUPPORTED], [
++    m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [$1], [
++    m4_if(nftables, FIREWALL_BACKEND, [$1], [
++    m4_if(yes, HOST_SUPPORTS_IP6TABLES, [$1], [$2])
++    ])])
++])
+-- 
+2.20.1
+

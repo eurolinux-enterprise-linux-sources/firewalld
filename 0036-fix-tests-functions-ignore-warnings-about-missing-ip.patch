@@ -1,0 +1,32 @@
+From 77819612c5f96a899823063fb9a612eab7cf14cb Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Mon, 13 May 2019 10:27:07 -0400
+Subject: [PATCH 36/37] fix: tests/functions: ignore warnings about missing
+ ip6tables
+
+We allow running firewalld without ip6tables, as such it's not an error
+for it to be missing during testsuite execution.
+
+(cherry picked from commit 3ac719c1908d4d86d344ebc7b1e105545471046a)
+(cherry picked from commit 1e7e05ba07c78f6c21de818d1ab2f18d3c31534e)
+---
+ src/tests/functions.at | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index 106c71ff9920..4c74c249f32e 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -132,6 +132,9 @@ m4_define([FWD_START_TEST], [
+ 
+ m4_define([FWD_END_TEST], [
+     m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
++        IF_IPV6_SUPPORTED([], [
++            sed -i "/WARNING: ip6tables not usable, disabling IPv6 firewall/d" ./firewalld.log
++        ])
+         if test x"$1" != x"ignore"; then
+             if test -n "$1"; then
+                 sed -i $1 ./firewalld.log
+-- 
+2.20.1
+

@@ -1,7 +1,7 @@
-From 2361184479832ac8f2754822e1e5d4de55c4898c Mon Sep 17 00:00:00 2001
+From c517bae24deb45ee3c75e5a7ae9927a82217dccb Mon Sep 17 00:00:00 2001
 From: Eric Garver <e@erig.me>
 Date: Wed, 14 Nov 2018 11:42:17 -0500
-Subject: [PATCH 1/4] remove ability to use nftables backend
+Subject: [PATCH] remove ability to use nftables backend
 
 ---
  config/firewalld.conf                  |  7 -------
@@ -12,10 +12,10 @@ Subject: [PATCH 1/4] remove ability to use nftables backend
  src/firewall/core/fw.py                |  5 -----
  src/firewall/core/io/firewalld_conf.py | 11 +----------
  src/firewall/server/config.py          | 19 +++----------------
- src/tests/dbus/firewalld.conf.at       |  2 --
- src/tests/functions.at                 |  3 ---
+ src/tests/dbus/firewalld.conf.at       |  6 +-----
+ src/tests/functions.at                 |  5 +----
  src/tests/testsuite.at                 |  2 +-
- 11 files changed, 6 insertions(+), 80 deletions(-)
+ 11 files changed, 8 insertions(+), 84 deletions(-)
 
 diff --git a/config/firewalld.conf b/config/firewalld.conf
 index b53c0aa50c53..63df409bf567 100644
@@ -242,18 +242,22 @@ index dfc562b537eb..011052a9cabf 100644
                  self.config.get_firewalld_conf().write()
                  self.PropertiesChanged(interface_name,
 diff --git a/src/tests/dbus/firewalld.conf.at b/src/tests/dbus/firewalld.conf.at
-index 473210de10af..3887d7ee4a7d 100644
+index 473210de10af..741b1e6f417f 100644
 --- a/src/tests/dbus/firewalld.conf.at
 +++ b/src/tests/dbus/firewalld.conf.at
-@@ -5,7 +5,6 @@ DBUS_GETALL([config], [config], 0, [dnl
+@@ -5,10 +5,7 @@ DBUS_GETALL([config], [config], 0, [dnl
  string "AutomaticHelpers" : variant string "system"
  string "CleanupOnExit" : variant string "no"
  string "DefaultZone" : variant string "public"
 -string "FirewallBackend" : variant string "nftables"
- m4_if(no, HOST_SUPPORTS_NFT_FIB, [dnl
- string "IPv6_rpfilter" : variant string "no"],[dnl
- string "IPv6_rpfilter" : variant string "yes"])
-@@ -29,7 +28,6 @@ _helper([Lockdown], [string:"yes"], [variant string "yes"])
+-m4_if(no, HOST_SUPPORTS_NFT_FIB, [dnl
+-string "IPv6_rpfilter" : variant string "no"],[dnl
+-string "IPv6_rpfilter" : variant string "yes"])
++string "IPv6_rpfilter" : variant string "yes"
+ string "IndividualCalls" : variant string "no"
+ string "Lockdown" : variant string "no"
+ string "LogDenied" : variant string "off"
+@@ -29,7 +26,6 @@ _helper([Lockdown], [string:"yes"], [variant string "yes"])
  _helper([LogDenied], [string:"all"], [variant string "all"])
  _helper([IPv6_rpfilter], [string:"yes"], [variant string "yes"])
  _helper([IndividualCalls], [string:"yes"], [variant string "yes"])
@@ -262,10 +266,16 @@ index 473210de10af..3887d7ee4a7d 100644
  dnl Note: DefaultZone is RO
  m4_undefine([_helper])
 diff --git a/src/tests/functions.at b/src/tests/functions.at
-index f8ab929118e5..b95324847e5c 100644
+index bae43faed410..3841df4264d7 100644
 --- a/src/tests/functions.at
 +++ b/src/tests/functions.at
-@@ -70,9 +70,6 @@ m4_define([FWD_START_TEST], [
+@@ -58,14 +58,11 @@ m4_define([FWD_START_TEST], [
+     fi
+ 
+     m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
+-        m4_define_default([FIREWALL_BACKEND], [nftables])
++        m4_define_default([FIREWALL_BACKEND], [iptables])
+ 
          dnl don't unload modules or bother cleaning up, the namespace will be deleted
          AT_CHECK([sed -i 's/^CleanupOnExit.*/CleanupOnExit=no/' ./firewalld.conf])
  
@@ -289,5 +299,5 @@ index 2943d7460919..68d18c9018b8 100644
      m4_include([regression.at])
      m4_include([python.at])
 -- 
-2.18.0
+2.20.1
 

@@ -1,0 +1,127 @@
+From fcff9a0adbc8042544372e1af5d84b48e6d52c93 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Mon, 13 May 2019 09:40:31 -0400
+Subject: [PATCH 32/37] fix: avoid calling backends that aren't available
+
+We should operate just fine if some backend aren't available, e.g.
+ip6tables. This fixes some areas that broke that.
+
+Fixes: #491
+(cherry picked from commit 3fdffa76be42ce88bff35ce2b84c2beda3c016a1)
+(cherry picked from commit 86d003dcdbd2eb20ac32858f7cfa3074169d5b5e)
+---
+ src/firewall/core/fw.py      | 54 ++++++++++++++++++------------------
+ src/firewall/core/fw_zone.py |  4 ++-
+ 2 files changed, 30 insertions(+), 28 deletions(-)
+
+diff --git a/src/firewall/core/fw.py b/src/firewall/core/fw.py
+index abb25f0c3e72..998de99e9532 100644
+--- a/src/firewall/core/fw.py
++++ b/src/firewall/core/fw.py
+@@ -703,24 +703,24 @@ class Firewall(object):
+     def get_backend_by_ipv(self, ipv):
+         if self.nftables_enabled:
+             return self.nftables_backend
+-        if ipv == "ipv4":
++        if ipv == "ipv4" and self.ip4tables_enabled:
+             return self.ip4tables_backend
+-        elif ipv == "ipv6":
++        elif ipv == "ipv6" and self.ip6tables_enabled:
+             return self.ip6tables_backend
+-        elif ipv == "eb":
++        elif ipv == "eb" and self.ebtables_enabled:
+             return self.ebtables_backend
+         raise FirewallError(errors.INVALID_IPV,
+-                            "'%s' is not a valid backend" % ipv)
++                            "'%s' is not a valid backend or is unavailable" % ipv)
+ 
+     def get_direct_backend_by_ipv(self, ipv):
+-        if ipv == "ipv4":
++        if ipv == "ipv4" and self.ip4tables_enabled:
+             return self.ip4tables_backend
+-        elif ipv == "ipv6":
++        elif ipv == "ipv6" and self.ip6tables_enabled:
+             return self.ip6tables_backend
+-        elif ipv == "eb":
++        elif ipv == "eb" and self.ebtables_enabled:
+             return self.ebtables_backend
+         raise FirewallError(errors.INVALID_IPV,
+-                            "'%s' is not a valid backend" % ipv)
++                            "'%s' is not a valid backend or is unavailable" % ipv)
+ 
+     def is_backend_enabled(self, name):
+         if name == "ip4tables":
+@@ -791,29 +791,29 @@ class Firewall(object):
+             rules = backend.build_default_rules(self._log_denied)
+             transaction.add_rules(backend, rules)
+ 
+-        ipv6_backend = self.get_backend_by_ipv("ipv6")
+-        if self.ipv6_rpfilter_enabled and \
+-           "raw" in ipv6_backend.get_available_tables():
++        if self.is_ipv_enabled("ipv6"):
++            ipv6_backend = self.get_backend_by_ipv("ipv6")
++            if self.ipv6_rpfilter_enabled and \
++               "raw" in ipv6_backend.get_available_tables():
+ 
+-            # Execute existing transaction
+-            transaction.execute(True)
+-            # Start new transaction
+-            transaction.clear()
++                # Execute existing transaction
++                transaction.execute(True)
++                # Start new transaction
++                transaction.clear()
+ 
+-            rules = ipv6_backend.build_rpfilter_rules(self._log_denied)
+-            transaction.add_rules(ipv6_backend, rules)
++                rules = ipv6_backend.build_rpfilter_rules(self._log_denied)
++                transaction.add_rules(ipv6_backend, rules)
+ 
+-            # Execute ipv6_rpfilter transaction, it might fail
+-            try:
+-                transaction.execute(True)
+-            except FirewallError as msg:
+-                log.warning("Applying rules for ipv6_rpfilter failed: %s", msg)
+-            # Start new transaction
+-            transaction.clear()
++                # Execute ipv6_rpfilter transaction, it might fail
++                try:
++                    transaction.execute(True)
++                except FirewallError as msg:
++                    log.warning("Applying rules for ipv6_rpfilter failed: %s", msg)
++                # Start new transaction
++                transaction.clear()
+ 
+-        else:
+-            if use_transaction is None:
+-                transaction.execute(True)
++        if use_transaction is None:
++            transaction.execute(True)
+ 
+     # flush and policy
+ 
+diff --git a/src/firewall/core/fw_zone.py b/src/firewall/core/fw_zone.py
+index d5eafb863439..31d7d6a168a8 100644
+--- a/src/firewall/core/fw_zone.py
++++ b/src/firewall/core/fw_zone.py
+@@ -1554,7 +1554,7 @@ class FirewallZone(object):
+         if rule.family is not None:
+             ipvs = [ rule.family ]
+         else:
+-            ipvs = [ "ipv4", "ipv6" ]
++            ipvs = [ipv for ipv in ["ipv4", "ipv6"] if self._fw.is_ipv_enabled(ipv)]
+ 
+         source_ipv = self._rule_source_ipv(rule.source)
+         if source_ipv is not None and source_ipv != "":
+@@ -1804,6 +1804,8 @@ class FirewallZone(object):
+         #
+         backends_ipv = []
+         for ipv in ["ipv4", "ipv6"]:
++            if not self._fw.is_ipv_enabled(ipv):
++                continue
+             backend = self._fw.get_backend_by_ipv(ipv)
+             if len(svc.destination) > 0:
+                 if ipv in svc.destination:
+-- 
+2.20.1
+

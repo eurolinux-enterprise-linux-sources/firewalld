@@ -1,0 +1,29 @@
+From 55ada411c884734d097c295f14d70e543c136a73 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Thu, 30 May 2019 09:45:07 -0400
+Subject: [PATCH 38/39] fix: tests: update package.m4 if makefile changed
+
+A common case is if we've done another ./configure and changed variables
+that get passed down via package.m4.
+
+(cherry picked from commit b2c98d9aadc3c4bc7306240381f1750a36850d09)
+---
+ src/tests/Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tests/Makefile.am b/src/tests/Makefile.am
+index 2a5645ba81d8..7a644ca915c1 100644
+--- a/src/tests/Makefile.am
++++ b/src/tests/Makefile.am
+@@ -9,7 +9,7 @@ EXTRA_DIST = \
+ 	$(TESTSUITE_FILES) \
+ 	$(srcdir)/package.m4
+ 
+-$(srcdir)/package.m4: $(top_srcdir)/configure.ac $(top_srcdir)/firewalld.spec
++$(srcdir)/package.m4: $(top_srcdir)/configure.ac $(top_srcdir)/firewalld.spec $(srcdir)/Makefile
+ 	:;{ \
+ 	echo 'm4_define([AT_PACKAGE_NAME],[$(PACKAGE_NAME)])' && \
+ 	echo 'm4_define([AT_PACKAGE_VERSION],[$(PACKAGE_VERSION)])' && \
+-- 
+2.20.1
+

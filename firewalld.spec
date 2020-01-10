@@ -8,7 +8,7 @@
 Summary: A firewall daemon with D-Bus interface providing a dynamic firewall
 Name: firewalld
 Version: 0.6.3
-Release: 2%{?dist}
+Release: 2%{?dist}.1
 URL:     http://www.firewalld.org
 License: GPLv2+
 Source0: https://github.com/firewalld/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -43,6 +43,14 @@ Patch28: 0020-doc-note-that-forward-port-may-enable-IP-forwarding.patch
 Patch29: 0021-doc-note-that-masquerade-will-enable-IP-forwarding.patch
 Patch30: 0022-fw_zone-forward-ports-only-enable-IP-forwarding-if-t.patch
 Patch31: 0023-tests-regression-coverage-for-enabling-IP-forwarding.patch
+Patch32: 0032-fix-avoid-calling-backends-that-aren-t-available.patch
+Patch33: 0033-test-pass-IPTABLES-make-variables-down-to-autotest.patch
+Patch34: 0034-test-add-macro-HOST_SUPPORTS_IP6TABLES.patch
+Patch35: 0035-test-add-macro-IF_IPV6_SUPPORTED.patch
+Patch36: 0036-fix-tests-functions-ignore-warnings-about-missing-ip.patch
+Patch37: 0037-fix-tests-guard-occurrences-of-IPv6.patch
+Patch38: 0038-fix-tests-update-package.m4-if-makefile-changed.patch
+Patch39: 0039-fix-tests-functions-define-HOST_SUPPORTS_IP6TABLES-v.patch
 
 BuildArch: noarch
 BuildRequires: desktop-file-utils
@@ -343,6 +351,9 @@ fi
 %{_mandir}/man1/firewall-config*.1*
 
 %changelog
+* Wed Aug 21 2019 Eric Garver <egarver@redhat.com> - 0.6.3-2.el7_7.1
+- backport fix to allow disabling IPv6
+
 * Tue Mar 19 2019 Eric Garver <egarver@redhat.com> - 0.6.3-2
 - backport recent upstream stable fixes
 - backport fix to enable IP forwarding only if toaddr specified

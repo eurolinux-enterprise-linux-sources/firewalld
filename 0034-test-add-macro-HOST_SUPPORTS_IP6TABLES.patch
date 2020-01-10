@@ -1,0 +1,41 @@
+From a565735cdf292e06d9530accee226beed0069368 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Mon, 13 May 2019 13:52:56 -0400
+Subject: [PATCH 34/37] test: add macro HOST_SUPPORTS_IP6TABLES
+
+(cherry picked from commit 4d5c3f190dc309ab03543dc7a65e45ee52858bd9)
+(cherry picked from commit ada120045f6a1d387edf02772e889717da68050b)
+---
+ src/tests/functions.at | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index 70d5ec66590d..da90f9ce549b 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -238,8 +238,10 @@ m4_define([IPTABLES_LIST_RULES], [
+ 
+ m4_define([IP6TABLES_LIST_RULES], [
+     m4_ifdef([TESTING_FIREWALL_OFFLINE_CMD], [], [
++    m4_if(yes, HOST_SUPPORTS_IP6TABLES, [
+         NS_CHECK([IP6TABLES -w -n -t $1 -L $2 | TRIM_WHITESPACE | tail -n +3], [$3], [m4_strip([$4])], [m4_strip([$5])], [$6], [$7])
+     ])
++    ])
+ ])
+ 
+ m4_define([NFT_LIST_RULES], [
+@@ -355,3 +357,11 @@ m4_ifnblank(
+     [m4_define([HOST_SUPPORTS_NFT_FIB], [yes])],
+     [m4_define([HOST_SUPPORTS_NFT_FIB], [no])]
+ )
++
++m4_define([HOST_SUPPORTS_IP6TABLES], [m4_esyscmd(
++    if IP6TABLES -L >/dev/null 2>&1; then
++        echo -n "yes"
++    else
++        echo -n "no"
++    fi
++)])
+-- 
+2.20.1
+
