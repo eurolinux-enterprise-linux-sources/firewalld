@@ -1,0 +1,190 @@
+From 17470fa9deac4aa15ecf75b9c811c093bc44c019 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Fri, 17 Aug 2018 12:26:53 -0400
+Subject: [PATCH 1/2] fw: if startup fails on reload, reapply non-perm config
+ that survives reload
+
+Even if startup fails we should still re-assign the non-permanent
+interfaces to zones and non-permanent direct rules.
+
+Fixes: rhbz 1498923
+(cherry picked from commit 2796edc1691f52c3655991c0be814a617cb26910)
+---
+ src/firewall/core/fw.py             | 121 +++++++++++++++-------------
+ src/tests/regression/rhbz1498923.at |  17 ++++
+ 2 files changed, 80 insertions(+), 58 deletions(-)
+
+diff --git a/src/firewall/core/fw.py b/src/firewall/core/fw.py
+index 5b706d6d3e80..9079f1bbc6a4 100644
+--- a/src/firewall/core/fw.py
++++ b/src/firewall/core/fw.py
+@@ -910,70 +910,75 @@ class Firewall(object):
+     def reload(self, stop=False):
+         _panic = self._panic
+ 
+-        try:
+-            # save zone interfaces
+-            _zone_interfaces = { }
+-            for zone in self.zone.get_zones():
+-                _zone_interfaces[zone] = self.zone.get_settings(zone)["interfaces"]
+-            # save direct config
+-            _direct_config = self.direct.get_runtime_config()
+-            _old_dz = self.get_default_zone()
+-
+-            # stop
+-            self.cleanup()
++        # save zone interfaces
++        _zone_interfaces = { }
++        for zone in self.zone.get_zones():
++            _zone_interfaces[zone] = self.zone.get_settings(zone)["interfaces"]
++        # save direct config
++        _direct_config = self.direct.get_runtime_config()
++        _old_dz = self.get_default_zone()
++
++        # stop
++        self.cleanup()
+ 
+-            self.set_policy("DROP")
++        self.set_policy("DROP")
+ 
++        start_exception = None
++        try:
+             self._start(reload=True, complete_reload=stop)
+-
+-            # handle interfaces in the default zone and move them to the new
+-            # default zone if it changed
+-            _new_dz = self.get_default_zone()
+-            if _new_dz != _old_dz:
+-                # if_new_dz has been introduced with the reload, we need to add it
+-                # https://github.com/firewalld/firewalld/issues/53
+-                if _new_dz not in _zone_interfaces:
+-                    _zone_interfaces[_new_dz] = { }
+-                # default zone changed. Move interfaces from old default zone to
+-                # the new one.
+-                for iface, settings in list(_zone_interfaces[_old_dz].items()):
+-                    if settings["__default__"]:
+-                        # move only those that were added to default zone
+-                        # (not those that were added to specific zone same as
+-                        # default)
+-                        _zone_interfaces[_new_dz][iface] = \
+-                            _zone_interfaces[_old_dz][iface]
+-                        del _zone_interfaces[_old_dz][iface]
+-
+-            # add interfaces to zones again
+-            for zone in self.zone.get_zones():
+-                if zone in _zone_interfaces:
+-                    self.zone.set_settings(zone, { "interfaces":
+-                                                   _zone_interfaces[zone] })
+-                    del _zone_interfaces[zone]
+-                else:
+-                    log.info1("New zone '%s'.", zone)
+-            if len(_zone_interfaces) > 0:
+-                for zone in list(_zone_interfaces.keys()):
+-                    log.info1("Lost zone '%s', zone interfaces dropped.", zone)
+-                    del _zone_interfaces[zone]
+-            del _zone_interfaces
+-
+-            # restore direct config
+-            self.direct.set_config(_direct_config)
+-
+-            # enable panic mode again if it has been enabled before or set policy
+-            # to ACCEPT
+-            if _panic:
+-                self.enable_panic_mode()
++        except Exception as e:
++            # save the exception for later, but continue restoring interfaces,
++            # etc. We'll re-raise it at the end.
++            start_exception = e
++
++        # handle interfaces in the default zone and move them to the new
++        # default zone if it changed
++        _new_dz = self.get_default_zone()
++        if _new_dz != _old_dz:
++            # if_new_dz has been introduced with the reload, we need to add it
++            # https://github.com/firewalld/firewalld/issues/53
++            if _new_dz not in _zone_interfaces:
++                _zone_interfaces[_new_dz] = { }
++            # default zone changed. Move interfaces from old default zone to
++            # the new one.
++            for iface, settings in list(_zone_interfaces[_old_dz].items()):
++                if settings["__default__"]:
++                    # move only those that were added to default zone
++                    # (not those that were added to specific zone same as
++                    # default)
++                    _zone_interfaces[_new_dz][iface] = \
++                        _zone_interfaces[_old_dz][iface]
++                    del _zone_interfaces[_old_dz][iface]
++
++        # add interfaces to zones again
++        for zone in self.zone.get_zones():
++            if zone in _zone_interfaces:
++                self.zone.set_settings(zone, { "interfaces":
++                                               _zone_interfaces[zone] })
++                del _zone_interfaces[zone]
+             else:
+-                self.set_policy("ACCEPT")
++                log.info1("New zone '%s'.", zone)
++        if len(_zone_interfaces) > 0:
++            for zone in list(_zone_interfaces.keys()):
++                log.info1("Lost zone '%s', zone interfaces dropped.", zone)
++                del _zone_interfaces[zone]
++        del _zone_interfaces
++
++        # restore direct config
++        self.direct.set_config(_direct_config)
++
++        # enable panic mode again if it has been enabled before or set policy
++        # to ACCEPT
++        if _panic:
++            self.enable_panic_mode()
++        else:
++            self.set_policy("ACCEPT")
+ 
+-            self._state = "RUNNING"
+-        except Exception:
++        if start_exception:
+             self._state = "FAILED"
+-            self.set_policy("ACCEPT")
+-            raise
++            raise start_exception
++        else:
++            self._state = "RUNNING"
+ 
+     # STATE
+ 
+diff --git a/src/tests/regression/rhbz1498923.at b/src/tests/regression/rhbz1498923.at
+index bb0d841db2a7..9b68678180ef 100644
+--- a/src/tests/regression/rhbz1498923.at
++++ b/src/tests/regression/rhbz1498923.at
+@@ -1,11 +1,28 @@
+ FWD_START_TEST([invalid direct rule causes reload error])
+ FWD_CHECK([-q --permanent --direct --add-rule ipv4 filter INPUT 0 -p tcp --dport 8080 -j ACCEPT])
+ FWD_CHECK([-q --permanent --direct --add-rule ipv4 filter INPUT 1 --a-bogus-flag])
++
++dnl add some non-permanent things that should persist a reload
++FWD_CHECK([-q --zone=public --add-interface=foobar0])
++FWD_CHECK([-q --direct --direct --add-rule ipv4 filter FORWARD 0 -p tcp -j ACCEPT])
++
+ FWD_RELOAD(13, [ignore], [ignore], 251)
+ FWD_CHECK([--state], 251, [ignore], [failed
+ ])
+ 
++dnl verify the non-permanent stuff we set above remained
++FWD_CHECK([--get-zone-of-interface=foobar0], 0, [dnl
++public
++])
++FWD_CHECK([-q --direct --direct --query-rule ipv4 filter FORWARD 0 -p tcp -j ACCEPT])
++
+ dnl now remove the bad rule and reload successfully
+ FWD_CHECK([-q --permanent --direct --remove-rule ipv4 filter INPUT 1 --a-bogus-flag])
+ FWD_RELOAD
++
++dnl verify the non-permanent stuff we set above remained
++FWD_CHECK([--get-zone-of-interface=foobar0], 0, [dnl
++public
++])
++FWD_CHECK([-q --direct --direct --query-rule ipv4 filter FORWARD 0 -p tcp -j ACCEPT])
+ FWD_END_TEST([-e '/.*a-bogus-flag.*/d'])
+-- 
+2.18.0
+

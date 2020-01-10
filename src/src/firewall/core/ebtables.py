@@ -21,10 +21,10 @@
 
 __all__ = [ "ebtables" ]
 
-import os.path, errno
+import os.path
 from firewall.core.prog import runProg
 from firewall.core.logger import log
-from firewall.functions import tempFile, readfile
+from firewall.functions import tempFile, readfile, splitArgs
 from firewall.config import COMMANDS
 import string
 
@@ -55,28 +55,13 @@ class ebtables(object):
     def __init__(self):
         self._command = COMMANDS[self.ipv]
         self._restore_command = COMMANDS["%s-restore" % self.ipv]
-        self.ebtables_lock = "/var/lib/ebtables/lock"
         self.restore_noflush_option = self._detect_restore_noflush_option()
         self.concurrent_option = self._detect_concurrent_option()
-        self.__remove_dangling_lock()
         self.fill_exists()
 
     def fill_exists(self):
         self.command_exists = os.path.exists(self._command)
         self.restore_command_exists = os.path.exists(self._restore_command)
-
-    def __remove_dangling_lock(self):
-        if os.path.exists(self.ebtables_lock):
-            ret = runProg("pidof", [ "-s", "ebtables" ])
-            ret2 = runProg("pidof", [ "-s", "ebtables-restore" ])
-            if ret[1] == "" and ret2[1] == "":
-                log.warning("Removing dangling ebtables lock file: '%s'" %
-                            self.ebtables_lock)
-                try:
-                    os.unlink(self.ebtables_lock)
-                except OSError as e:
-                    if e.errno != errno.ENOENT:
-                        raise
 
     def _detect_concurrent_option(self):
         # Do not change any rules, just try to use the --concurrent option
@@ -105,20 +90,35 @@ class ebtables(object):
             _args.append(self.concurrent_option)
         _args += ["%s" % item for item in args]
         log.debug2("%s: %s %s", self.__class__, self._command, " ".join(_args))
-        self.__remove_dangling_lock()
         (status, ret) = runProg(self._command, _args)
         if status != 0:
             raise ValueError("'%s %s' failed: %s" % (self._command,
                                                      " ".join(args), ret))
         return ret
 
-    def set_rules(self, rules, flush=False):
+    def _rule_contains(self, rule, pattern):
+        try:
+            i = rule.index(pattern)
+        except ValueError:
+            return False
+        return True
+
+    def _rule_validate(self, rule):
+        for str in ["%%REJECT%%", "%%ICMP%%", "%%LOGTYPE%%"]:
+            if self._rule_contains(rule, str):
+                raise FirewallError(errors.INVALID_IPV,
+                        "'%s' invalid for ebtables" % str)
+
+    def set_rules(self, rules, flush=False, log_denied="off"):
         temp_file = tempFile()
 
         table = "filter"
         table_rules = { }
         for _rule in rules:
             rule = _rule[:]
+
+            self._rule_validate(rule)
+
             # get table form rule
             for opt in [ "-t", "--table" ]:
                 try:
@@ -175,7 +175,8 @@ class ebtables(object):
                                                      " ".join(args), ret))
         return ret
 
-    def set_rule(self, rule):
+    def set_rule(self, rule, log_denied="off"):
+        self._rule_validate(rule)
         return self.__run(rule)
 
     def append_rule(self, rule):
@@ -237,3 +238,18 @@ class ebtables(object):
                     except Exception as msg:
                         log.error("Failed to set policy for %s: %s", self.ipv,
                                   msg)
+
+    def apply_default_rules(self, transaction, log_denied="off"):
+        for table in DEFAULT_RULES:
+            if table not in self.available_tables():
+                continue
+            default_rules = DEFAULT_RULES[table][:]
+            if log_denied != "off" and table in LOG_RULES:
+                default_rules.extend(LOG_RULES[table])
+            prefix = [ "-t", table ]
+            for rule in default_rules:
+                if type(rule) == list:
+                    _rule = prefix + rule
+                else:
+                    _rule = prefix + splitArgs(rule)
+                transaction.add_rule(self.ipv, _rule)

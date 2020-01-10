@@ -43,9 +43,10 @@ from firewall.core.io.helper import helper_reader
 from firewall.command import FirewallCommand
 
 # check for root user
-if os.getuid() != 0:
-    sys.stderr.write("You need to be root to run %s.\n" % sys.argv[0])
-    sys.exit(-1)
+def assert_root():
+    if os.getuid() != 0:
+        sys.stderr.write("You need to be root to run %s.\n" % sys.argv[0])
+        sys.exit(-1)
 
 SYSTEM_CONFIG_FIREWALL = config.SYSCONFIGDIR + '/system-config-firewall'
 
@@ -59,6 +60,8 @@ General Options
   -h, --help           Prints a short help text and exists
   -V, --version        Print the version string of firewalld
   -q, --quiet          Do not print status messages
+      --system-config  Path to firewalld system configuration
+      --default-config Path to firewalld default configuration
 
 Lokkit Compatibility Options
   --migrate-system-config-firewall=<file>
@@ -478,13 +481,13 @@ def pk_symlink(product='server'):
     _PK_DIR = '/usr/share/polkit-1/actions/'
     _PK_NAME = 'org.fedoraproject.FirewallD1.'
     os.chdir(_PK_DIR)
-    if os.path.isfile(_PK_NAME+product+'.policy'):
+    if os.path.isfile(_PK_NAME+product+'.policy.choice'):
         if os.path.isfile(_PK_NAME+'policy'):
             os.remove(_PK_NAME+'policy')
-        os.symlink(_PK_NAME+product+'.policy', _PK_NAME+'policy')
-        cmd.print_and_exit('symlink '+_PK_DIR+_PK_NAME+product+'.policy -> '+_PK_NAME+'policy')
+        os.symlink(_PK_NAME+product+'.policy.choice', _PK_NAME+'policy')
+        cmd.print_and_exit('symlink '+_PK_DIR+_PK_NAME+product+'.policy.choice -> '+_PK_NAME+'policy')
     else:
-        cmd.fail('no such file '+_PK_DIR+_PK_NAME+product+'.policy')
+        cmd.fail('no such file '+_PK_DIR+_PK_NAME+product+'.policy.choice')
 
 # system-config-firewall
 def read_sysconfig_args(config_file=SYSTEM_CONFIG_FIREWALL):
@@ -526,6 +529,9 @@ parser_group_lokkit.add_argument("--masq", "-m", metavar="<iface>", action='appe
 parser_group_lokkit.add_argument("--custom-rules", metavar="<filename>", action='append')
 parser_group_lokkit.add_argument("--forward-port", metavar="<port>", action='append')
 parser_group_lokkit.add_argument("--block-icmp", metavar="<icmptype>", action='append')
+
+parser.add_argument("--system-config", metavar="path")
+parser.add_argument("--default-config", metavar="path")
 
 parser_group_standalone = parser.add_mutually_exclusive_group()
 parser_group_standalone.add_argument("-h", "--help",
@@ -775,6 +781,8 @@ if len(sys.argv) > 1 and \
     if a.help:
         __usage()
         sys.exit(0)
+    else:
+        assert_root()
     if a.quiet:
         # it makes no sense to use --quiet with these options
         a.quiet = False
@@ -809,6 +817,7 @@ elif len(sys.argv) > 1:
         args = aux_args[:i+1] # all but not <args>
         args.append(joinArgs(aux_args[i+1:])) # add <args> as one arg
 else:
+    assert_root()
     # migrate configuration from SYSTEM_CONFIG_FIREWALL
     args = read_sysconfig_args()
     if not args:
@@ -1020,6 +1029,13 @@ if a.help:
     __usage()
     sys.exit(0)
 
+assert_root()
+
+if a.system_config:
+    config.set_system_config_paths(a.system_config)
+if a.default_config:
+    config.set_default_config_paths(a.default_config)
+
 zone = a.zone
 fw = Firewall_test()
 fw.start()
@@ -1098,7 +1114,8 @@ try:
             fw_settings.setMasquerade(True)
         if a.forward_port:
             for fp in a.forward_port:
-                (port, protocol, toport, toaddr) = cmd.parse_forward_port(fp)
+                (port, protocol, toport, toaddr) = cmd.parse_forward_port(
+                    fp, compat=True)
                 cmd.print_msg("Adding forward port %s:%s:%s:%s to default zone." % \
                       (port, protocol, toport, toaddr))
                 if not fw_settings.queryForwardPort(port, protocol, toport,
@@ -2076,7 +2093,8 @@ try:
             cmd.add_sequence(a.add_service, fw_settings.addService,
                              fw_settings.queryService, None, "'%s'")
         elif a.remove_service_from_zone:
-            cmd.remove_sequence(a.remove_service, fw_settings.removeService,
+            cmd.remove_sequence(a.remove_service_from_zone,
+                                fw_settings.removeService,
                                 fw_settings.queryService, None, "'%s'")
         elif a.query_service:
             cmd.query_sequence(a.query_service, fw_settings.queryService,

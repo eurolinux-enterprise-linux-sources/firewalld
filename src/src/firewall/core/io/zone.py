@@ -26,8 +26,8 @@ import os
 import io
 import shutil
 
-from firewall.config import ETC_FIREWALLD
-from firewall.functions import checkIP, checkIPnMask, checkIP6nMask, checkInterface, uniqify, max_zone_name_len, u2b_if_py2, check_mac, portStr
+from firewall import config
+from firewall.functions import checkIP, checkIP6, checkIPnMask, checkIP6nMask, checkInterface, uniqify, max_zone_name_len, u2b_if_py2, check_mac, portStr
 from firewall.core.base import DEFAULT_ZONE_TARGET, ZONE_TARGETS
 from firewall.core.io.io_object import PY2, IO_Object, \
     IO_Object_ContentHandler, IO_Object_XMLGenerator, check_port, \
@@ -169,7 +169,7 @@ class Zone(IO_Object):
             rules_str = [str(rule) for rule in self.rules]
             return rules_str
         else:
-            return super(Zone, self).__getattr__(name)
+            return getattr(super(Zone, self), name)
 
     def __setattr__(self, name, value):
         if name == "rules_str":
@@ -210,7 +210,7 @@ class Zone(IO_Object):
                 if fwd_port[2]:
                     check_port(fwd_port[2])
                 if fwd_port[3]:
-                    if not checkIP(fwd_port[3]):
+                    if not checkIP(fwd_port[3]) and not checkIP6(fwd_port[3]):
                         raise FirewallError(
                             errors.INVALID_ADDR,
                             "to-addr '%s' is not a valid address" % fwd_port[3])
@@ -245,11 +245,17 @@ class Zone(IO_Object):
         elif name.count('/') > 1:
             raise FirewallError(errors.INVALID_NAME,
                                 "more than one '/' in '%s'" % name)
-        elif len(name) > max_zone_name_len():
-            raise FirewallError(
-                errors.INVALID_NAME,
-                "'%s' has %d chars, max is %d" % (name, len(name),
-                                                  max_zone_name_len()))
+        else:
+            if "/" in name:
+                checked_name = name[:name.find('/')]
+            else:
+                checked_name = name
+            if len(checked_name) > max_zone_name_len():
+                raise FirewallError(errors.INVALID_NAME,
+                                    "Zone of '%s' has %d chars, max is %d %s" % (
+                                    name, len(checked_name),
+                                    max_zone_name_len(),
+                                    self.combined))
 
     def combine(self, zone):
         self.combined = True
@@ -446,7 +452,7 @@ class zone_ContentHandler(IO_Object_ContentHandler):
             if to_port:
                 check_port(to_port)
             if to_addr:
-                if not checkIP(to_addr):
+                if not checkIP(to_addr) and not checkIP6(to_addr):
                     raise FirewallError(errors.INVALID_ADDR,
                                         "to-addr '%s' is not a valid address" \
                                         % to_addr)
@@ -674,16 +680,17 @@ class zone_ContentHandler(IO_Object_ContentHandler):
         elif name in [ "accept", "reject", "drop", "mark", "log", "audit" ]:
             self._limit_ok = None
 
-def zone_reader(filename, path):
+def zone_reader(filename, path, no_check_name=False):
     zone = Zone()
     if not filename.endswith(".xml"):
         raise FirewallError(errors.INVALID_NAME,
                             "'%s' is missing .xml suffix" % filename)
     zone.name = filename[:-4]
-    zone.check_name(zone.name)
+    if not no_check_name:
+        zone.check_name(zone.name)
     zone.filename = filename
     zone.path = path
-    zone.builtin = False if path.startswith(ETC_FIREWALLD) else True
+    zone.builtin = False if path.startswith(config.ETC_FIREWALLD) else True
     zone.default = zone.builtin
     handler = zone_ContentHandler(zone)
     parser = sax.make_parser()
@@ -717,9 +724,9 @@ def zone_writer(zone, path=None):
             log.error("Backup of file '%s' failed: %s", name, msg)
 
     dirpath = os.path.dirname(name)
-    if dirpath.startswith(ETC_FIREWALLD) and not os.path.exists(dirpath):
-        if not os.path.exists(ETC_FIREWALLD):
-            os.mkdir(ETC_FIREWALLD, 0o750)
+    if dirpath.startswith(config.ETC_FIREWALLD) and not os.path.exists(dirpath):
+        if not os.path.exists(config.ETC_FIREWALLD):
+            os.mkdir(config.ETC_FIREWALLD, 0o750)
         os.mkdir(dirpath, 0o750)
 
     f = io.open(name, mode='wt', encoding='UTF-8')

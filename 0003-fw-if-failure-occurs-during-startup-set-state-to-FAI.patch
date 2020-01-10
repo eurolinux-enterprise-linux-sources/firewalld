@@ -1,0 +1,244 @@
+From 9e4bf24e1e0a5d54398d2220f0a5217eff0704a7 Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Mon, 13 Aug 2018 16:53:46 -0400
+Subject: [PATCH 3/4] fw: if failure occurs during startup set state to FAILED
+
+Previously if a failure occurred at startup firewalld would get stuck in
+INIT state and the policy would remain as "DROP". This commit changes
+that behavior and introduces a new state "FAILED", which means a failure
+occurred and we're running in a failed state. Policy is set to "ACCEPT"
+so as to hopefully prevent locking out an admin.
+
+(cherry picked from commit f475bd2293b7ba01ad4b56b68bef1b61d01526f0)
+---
+ doc/xml/firewall-cmd.xml.in         |   2 +-
+ doc/xml/firewalld.dbus.xml          |   2 +-
+ src/firewall-cmd                    |   2 +
+ src/firewall/core/fw.py             | 131 +++++++++++++++-------------
+ src/firewall/errors.py              |   1 +
+ src/tests/regression/rhbz1498923.at |   8 +-
+ 6 files changed, 83 insertions(+), 63 deletions(-)
+
+diff --git a/doc/xml/firewall-cmd.xml.in b/doc/xml/firewall-cmd.xml.in
+index 32c89591db86..c2606553e549 100644
+--- a/doc/xml/firewall-cmd.xml.in
++++ b/doc/xml/firewall-cmd.xml.in
+@@ -118,7 +118,7 @@
+ 	  <term><option>--state</option></term>
+ 	  <listitem>
+ 	    <para>
+-	      Check whether the firewalld daemon is active (i.e. running). Returns an exit code 0 if it is active, <replaceable>NOT_RUNNING</replaceable> otherwise (see <xref linkend="exit_codes"/>). This will also print the state to <replaceable>STDOUT</replaceable>.
++	      Check whether the firewalld daemon is active (i.e. running). Returns an exit code 0 if it is active, <replaceable>RUNNING_BUT_FAILED</replaceable> if failure occurred on startup, <replaceable>NOT_RUNNING</replaceable> otherwise. See <xref linkend="exit_codes"/>. This will also print the state to <replaceable>STDOUT</replaceable>.
+ 	    </para>
+ 	  </listitem>
+ 	</varlistentry>
+diff --git a/doc/xml/firewalld.dbus.xml b/doc/xml/firewalld.dbus.xml
+index acdbb5fd6e00..ec82d4cad077 100644
+--- a/doc/xml/firewalld.dbus.xml
++++ b/doc/xml/firewalld.dbus.xml
+@@ -488,7 +488,7 @@
+           </varlistentry>
+           <varlistentry id="FirewallD1.Properties.state">
+             <term><parameter>state</parameter> - s - (ro)</term>
+-            <listitem><para>firewalld state. This can be either <literal>INIT</literal> or <literal>RUNNING</literal>. In <literal>INIT</literal> state, firewalld is starting up and initializing.</para></listitem>
++            <listitem><para>firewalld state. This can be either <literal>INIT</literal>, <literal>FAILED</literal>, or <literal>RUNNING</literal>. In <literal>INIT</literal> state, firewalld is starting up and initializing. In <literal>FAILED</literal> state, firewalld completely started but experienced a failure.</para></listitem>
+           </varlistentry>
+           <varlistentry id="FirewallD1.Properties.version">
+             <term><parameter>version</parameter> - s - (ro)</term>
+diff --git a/src/firewall-cmd b/src/firewall-cmd
+index b80115564e1b..12e18bb88a54 100755
+--- a/src/firewall-cmd
++++ b/src/firewall-cmd
+@@ -2022,6 +2022,8 @@ elif a.state:
+     state = fw.get_property("state")
+     if state == "RUNNING":
+         cmd.print_and_exit ("running")
++    elif state == "FAILED":
++        cmd.print_and_exit("failed", errors.RUNNING_BUT_FAILED)
+     else:
+         cmd.print_and_exit ("not running", errors.NOT_RUNNING)
+ elif a.get_log_denied:
+diff --git a/src/firewall/core/fw.py b/src/firewall/core/fw.py
+index 1ff36f18cd99..5b706d6d3e80 100644
+--- a/src/firewall/core/fw.py
++++ b/src/firewall/core/fw.py
+@@ -451,11 +451,16 @@ class Firewall(object):
+             tm2 = time.time()
+             log.debug2("Flushing and applying took %f seconds" % (tm2 - tm1))
+ 
+-        self._state = "RUNNING"
+-
+     def start(self):
+-        self._start()
+-        self.set_policy("ACCEPT")
++        try:
++            self._start()
++        except Exception:
++            self._state = "FAILED"
++            self.set_policy("ACCEPT")
++            raise
++        else:
++            self._state = "RUNNING"
++            self.set_policy("ACCEPT")
+ 
+     def _loader(self, path, reader_type, combine=False):
+         # combine: several zone files are getting combined into one obj
+@@ -905,64 +910,70 @@ class Firewall(object):
+     def reload(self, stop=False):
+         _panic = self._panic
+ 
+-        # save zone interfaces
+-        _zone_interfaces = { }
+-        for zone in self.zone.get_zones():
+-            _zone_interfaces[zone] = self.zone.get_settings(zone)["interfaces"]
+-        # save direct config
+-        _direct_config = self.direct.get_runtime_config()
+-        _old_dz = self.get_default_zone()
+-
+-        # stop
+-        self.cleanup()
+-
+-        self.set_policy("DROP")
+-
+-        # start
+-        self._start(reload=True, complete_reload=stop)
+-
+-        # handle interfaces in the default zone and move them to the new
+-        # default zone if it changed
+-        _new_dz = self.get_default_zone()
+-        if _new_dz != _old_dz:
+-            # if_new_dz has been introduced with the reload, we need to add it
+-            # https://github.com/firewalld/firewalld/issues/53
+-            if _new_dz not in _zone_interfaces:
+-                _zone_interfaces[_new_dz] = { }
+-            # default zone changed. Move interfaces from old default zone to
+-            # the new one.
+-            for iface, settings in list(_zone_interfaces[_old_dz].items()):
+-                if settings["__default__"]:
+-                    # move only those that were added to default zone
+-                    # (not those that were added to specific zone same as
+-                    # default)
+-                    _zone_interfaces[_new_dz][iface] = \
+-                        _zone_interfaces[_old_dz][iface]
+-                    del _zone_interfaces[_old_dz][iface]
+-
+-        # add interfaces to zones again
+-        for zone in self.zone.get_zones():
+-            if zone in _zone_interfaces:
+-                self.zone.set_settings(zone, { "interfaces":
+-                                               _zone_interfaces[zone] })
+-                del _zone_interfaces[zone]
++        try:
++            # save zone interfaces
++            _zone_interfaces = { }
++            for zone in self.zone.get_zones():
++                _zone_interfaces[zone] = self.zone.get_settings(zone)["interfaces"]
++            # save direct config
++            _direct_config = self.direct.get_runtime_config()
++            _old_dz = self.get_default_zone()
++
++            # stop
++            self.cleanup()
++
++            self.set_policy("DROP")
++
++            self._start(reload=True, complete_reload=stop)
++
++            # handle interfaces in the default zone and move them to the new
++            # default zone if it changed
++            _new_dz = self.get_default_zone()
++            if _new_dz != _old_dz:
++                # if_new_dz has been introduced with the reload, we need to add it
++                # https://github.com/firewalld/firewalld/issues/53
++                if _new_dz not in _zone_interfaces:
++                    _zone_interfaces[_new_dz] = { }
++                # default zone changed. Move interfaces from old default zone to
++                # the new one.
++                for iface, settings in list(_zone_interfaces[_old_dz].items()):
++                    if settings["__default__"]:
++                        # move only those that were added to default zone
++                        # (not those that were added to specific zone same as
++                        # default)
++                        _zone_interfaces[_new_dz][iface] = \
++                            _zone_interfaces[_old_dz][iface]
++                        del _zone_interfaces[_old_dz][iface]
++
++            # add interfaces to zones again
++            for zone in self.zone.get_zones():
++                if zone in _zone_interfaces:
++                    self.zone.set_settings(zone, { "interfaces":
++                                                   _zone_interfaces[zone] })
++                    del _zone_interfaces[zone]
++                else:
++                    log.info1("New zone '%s'.", zone)
++            if len(_zone_interfaces) > 0:
++                for zone in list(_zone_interfaces.keys()):
++                    log.info1("Lost zone '%s', zone interfaces dropped.", zone)
++                    del _zone_interfaces[zone]
++            del _zone_interfaces
++
++            # restore direct config
++            self.direct.set_config(_direct_config)
++
++            # enable panic mode again if it has been enabled before or set policy
++            # to ACCEPT
++            if _panic:
++                self.enable_panic_mode()
+             else:
+-                log.info1("New zone '%s'.", zone)
+-        if len(_zone_interfaces) > 0:
+-            for zone in list(_zone_interfaces.keys()):
+-                log.info1("Lost zone '%s', zone interfaces dropped.", zone)
+-                del _zone_interfaces[zone]
+-        del _zone_interfaces
+-
+-        # restore direct config
+-        self.direct.set_config(_direct_config)
+-
+-        # enable panic mode again if it has been enabled before or set policy
+-        # to ACCEPT
+-        if _panic:
+-            self.enable_panic_mode()
+-        else:
++                self.set_policy("ACCEPT")
++
++            self._state = "RUNNING"
++        except Exception:
++            self._state = "FAILED"
+             self.set_policy("ACCEPT")
++            raise
+ 
+     # STATE
+ 
+diff --git a/src/firewall/errors.py b/src/firewall/errors.py
+index 1cd604884c99..63d007191ffa 100644
+--- a/src/firewall/errors.py
++++ b/src/firewall/errors.py
+@@ -97,6 +97,7 @@ MISSING_NAME        =  205
+ MISSING_SETTING     =  206
+ MISSING_FAMILY      =  207
+ 
++RUNNING_BUT_FAILED  =  251
+ NOT_RUNNING         =  252
+ NOT_AUTHORIZED      =  253
+ UNKNOWN_ERROR       =  254
+diff --git a/src/tests/regression/rhbz1498923.at b/src/tests/regression/rhbz1498923.at
+index 505a523d5cc4..bb0d841db2a7 100644
+--- a/src/tests/regression/rhbz1498923.at
++++ b/src/tests/regression/rhbz1498923.at
+@@ -1,5 +1,11 @@
+ FWD_START_TEST([invalid direct rule causes reload error])
+ FWD_CHECK([-q --permanent --direct --add-rule ipv4 filter INPUT 0 -p tcp --dport 8080 -j ACCEPT])
+ FWD_CHECK([-q --permanent --direct --add-rule ipv4 filter INPUT 1 --a-bogus-flag])
+-FWD_RELOAD(13, [ignore], [ignore])
++FWD_RELOAD(13, [ignore], [ignore], 251)
++FWD_CHECK([--state], 251, [ignore], [failed
++])
++
++dnl now remove the bad rule and reload successfully
++FWD_CHECK([-q --permanent --direct --remove-rule ipv4 filter INPUT 1 --a-bogus-flag])
++FWD_RELOAD
+ FWD_END_TEST([-e '/.*a-bogus-flag.*/d'])
+-- 
+2.18.0
+

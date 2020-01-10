@@ -7,12 +7,14 @@
 
 Summary: A firewall daemon with D-Bus interface providing a dynamic firewall
 Name: firewalld
-Version: 0.4.4.4
+Version: 0.5.3
 Release: 1%{?dist}
 URL:     http://www.firewalld.org
 License: GPLv2+
-Source0: https://github.com/t-woerner/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source0: https://github.com/firewalld/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 BuildArch: noarch
+BuildRequires: autoconf
+BuildRequires: automake
 BuildRequires: desktop-file-utils
 BuildRequires: gettext
 BuildRequires: intltool
@@ -128,12 +130,20 @@ sed -i 's|/usr/bin/python|%{__python3}|' %{py3dir}/config/lockdown-whitelist.xml
 
 %build
 %configure --enable-sysconfig --enable-rpmmacros
+%if 0%{?use_python3}
+make -C src %{?_smp_mflags}
+%else
 make %{?_smp_mflags}
+%endif
 
 %if 0%{?with_python3}
 pushd %{py3dir}
 %configure --enable-sysconfig --enable-rpmmacros PYTHON=%{__python3}
+%if 0%{?use_python3}
 make %{?_smp_mflags}
+%else
+make -C src %{?_smp_mflags}
+%endif
 popd
 %endif #0%{?with_python3}
 
@@ -225,21 +235,19 @@ fi
 %attr(0750,root,root) %dir %{_sysconfdir}/firewalld/ipsets
 %attr(0750,root,root) %dir %{_sysconfdir}/firewalld/services
 %attr(0750,root,root) %dir %{_sysconfdir}/firewalld/zones
-%dir %{_datadir}/firewalld
-%dir %{_datadir}/firewalld/tests
-%{_datadir}/firewalld/tests
 %defattr(0644,root,root)
 %config(noreplace) %{_sysconfdir}/sysconfig/firewalld
 #%attr(0755,root,root) %{_initrddir}/firewalld
 %{_unitdir}/firewalld.service
 %config(noreplace) %{_sysconfdir}/dbus-1/system.d/FirewallD.conf
-%{_datadir}/polkit-1/actions/org.fedoraproject.FirewallD1.desktop.policy
-%{_datadir}/polkit-1/actions/org.fedoraproject.FirewallD1.server.policy
+%{_datadir}/polkit-1/actions/org.fedoraproject.FirewallD1.desktop.policy.choice
+%{_datadir}/polkit-1/actions/org.fedoraproject.FirewallD1.server.policy.choice
 %{_datadir}/polkit-1/actions/org.fedoraproject.FirewallD1.policy
 %{_mandir}/man1/firewall*cmd*.1*
 %{_mandir}/man1/firewallctl*.1*
 %{_mandir}/man1/firewalld*.1*
 %{_mandir}/man5/firewall*.5*
+%{_sysconfdir}/modprobe.d/firewalld-sysctls.conf
 
 %files -n python-firewall
 %attr(0755,root,root) %dir %{python2_sitelib}/firewall
@@ -309,6 +317,63 @@ fi
 %{_mandir}/man1/firewall-config*.1*
 
 %changelog
+* Tue Mar 13 2018 Eric Garver <e@erig.me> - 0.5.3-1
+- rebase package to v0.5.3
+
+* Tue Mar 13 2018 Eric Garver <e@erig.me> - 0.5.2-1
+- rebase package to v0.5.2
+
+* Sun Feb  4 2018 Eric Garver <e@erig.me> - 0.5.1-1
+- rebase package to v0.5.1
+
+* Thu Jan 25 2018 Eric Garver <e@erig.me> - 0.5.0-1
+- rebase package to v0.5.0
+
+* Tue Jun  6 2017 Thomas Woerner <twoerner@redhat.com> - 0.4.4.5-1
+- Fix build from spec without fedorahosted.org archives
+- firewalld.spec: Add missing autotools dependencies
+- firewall-offline-cmd: Fix --remove-service-from-zone option RHBZ#1438127
+- Merge pull request 213 from hwoarang/add-missing-autotools
+- Support sctp and dccp in ports, source-ports, forward-ports, helpers and
+  rich rules
+- firewall-cmd: Fix --{set,get}-{short,description} for zone
+- firewall.core.ipXtables: Use new wait option for restore commands if
+  available
+- Merge pull request 212 from leongold/ovirt-imageio-service
+- config/Makefile.am: Install new ovirt-imageio service
+- README: Use www.firewalld.org/documentation as documentation link
+- Fix misspelled word in documentation
+- Merge pull request 216 from tobiasvl/fix-protocol-spelling
+- Man pages: Mention sctp and dccp protocols for remaining ports, ..
+- Adding ovirt-vmconsole service file
+- Adding oVirt storage-console service.
+- Adding ctdb service file.
+- Merge pull request 219 from leongold/ctdb-service
+- Fixing incorrect port number
+- Merge pull request 217 from leongold/ovirt-vmconsole
+- Merge pull request 218 from leongold/ovirt-storageconsole
+- config/Makefile.am: New services ctdb, ovirt-storageconsole and
+  ovirt-vmconsole
+- Adding service file for nrpe.
+- Merge pull request 220 from leongold/nrpe-service
+- config/Makefile.am: New services nrpe
+- Rename extension for policy choices (server and desktop) to .policy.choice
+  (RHBZ#1449754)
+- D-Bus interfaces: Fix GetAll for interfaces without properties
+  (RHBZ#1452017)
+- firewall.core.fw_config: Fix wrong variable use in repr output
+- firewall.core.fw_icmptype: Add missing import for copy
+- firewall.core.fw_test: Fix wrong format string in repr
+- firewall.core.io.zone: Fix __getattr__ use on super(Zone)
+- firewall.functions: New function get_nf_nat_helpers
+- firewall.core.fw: Get NAT helpers and store them internally.
+- firewall.core.fw_zone: Load NAT helpers with conntrack helpers
+- firewalld.dbus: Add missing properties nf_conntrach_helper_setting and
+  nf_conntrack_helpers
+- firewall.server.firewalld: New property for NAT helpers supported by the
+  kernel
+- Translation updates
+
 * Mon Mar 27 2017 Thomas Woerner <twoerner@redhat.com> - 0.4.4.4-1
 - Drop references to fedorahosted.org from spec file and Makefile.am
 - Fix inconsistent ordering of rules in INPUT_ZONE_SOURCE (issue#166)

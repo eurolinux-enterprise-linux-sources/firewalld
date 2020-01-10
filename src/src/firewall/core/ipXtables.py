@@ -23,7 +23,7 @@ import os.path
 
 from firewall.core.prog import runProg
 from firewall.core.logger import log
-from firewall.functions import tempFile, readfile
+from firewall.functions import tempFile, readfile, splitArgs
 from firewall import config
 import string
 
@@ -157,6 +157,7 @@ class ip4tables(object):
         self._command = config.COMMANDS[self.ipv]
         self._restore_command = config.COMMANDS["%s-restore" % self.ipv]
         self.wait_option = self._detect_wait_option()
+        self.restore_wait_option = self._detect_restore_wait_option()
         self.fill_exists()
 
     def fill_exists(self):
@@ -206,12 +207,42 @@ class ip4tables(object):
 
         return out_rules
 
-    def set_rules(self, rules, flush=False):
+    def _rule_replace(self, rule, pattern, replacement):
+        try:
+            i = rule.index(pattern)
+        except ValueError:
+            return False
+        else:
+            rule[i:i+1] = replacement
+            return True
+
+    def set_rules(self, rules, flush=False, log_denied="off"):
         temp_file = tempFile()
 
         table_rules = { }
         for _rule in rules:
             rule = _rule[:]
+
+            # replace %%REJECT%%
+            self._rule_replace(rule, "%%REJECT%%", \
+                    ["REJECT", "--reject-with", DEFAULT_REJECT_TYPE[self.ipv]])
+
+            # replace %%ICMP%%
+            self._rule_replace(rule, "%%ICMP%%", [ICMP[self.ipv]])
+
+            # replace %%LOGTYPE%%
+            try:
+                i = rule.index("%%LOGTYPE%%")
+            except ValueError:
+                pass
+            else:
+                if log_denied == "off":
+                    continue
+                if log_denied in [ "unicast", "broadcast", "multicast" ]:
+                    rule[i:i+1] = [ "-m", "pkttype", "--pkt-type", log_denied ]
+                else:
+                    rule.pop(i)
+
             table = "filter"
             # get table form rule
             for opt in [ "-t", "--table" ]:
@@ -251,6 +282,8 @@ class ip4tables(object):
         log.debug2("%s: %s %s", self.__class__, self._restore_command,
                    "%s: %d" % (temp_file.name, stat.st_size))
         args = [ ]
+        if self.restore_wait_option:
+            args.append(self.restore_wait_option)
         if not flush:
             args.append("-n")
 
@@ -274,7 +307,28 @@ class ip4tables(object):
                                                      " ".join(args), ret))
         return ret
 
-    def set_rule(self, rule):
+    def set_rule(self, rule, log_denied="off"):
+        # replace %%REJECT%%
+        self._rule_replace(rule, "%%REJECT%%", \
+                ["REJECT", "--reject-with", DEFAULT_REJECT_TYPE[self.ipv]])
+
+        # replace %%ICMP%%
+        self._rule_replace(rule, "%%ICMP%%", [ICMP[self.ipv]])
+
+        # replace %%LOGTYPE%%
+        try:
+            i = rule.index("%%LOGTYPE%%")
+        except ValueError:
+            pass
+        else:
+            if log_denied == "off":
+                return ""
+            if log_denied in [ "unicast", "broadcast", "multicast" ]:
+                rule[i:i+1] = [ "-m", "pkttype", "--pkt-type",
+                                self._log_denied ]
+            else:
+                rule.pop(i)
+
         return self.__run(rule)
 
     def append_rule(self, rule):
@@ -317,6 +371,25 @@ class ip4tables(object):
             if ret[0] == 0:
                 wait_option = "-w2"  # wait max 2 seconds
             log.debug2("%s: %s will be using %s option.", self.__class__, self._command, wait_option)
+
+        return wait_option
+
+    def _detect_restore_wait_option(self):
+        temp_file = tempFile()
+        temp_file.write("#foo")
+        temp_file.close()
+
+        wait_option = ""
+        for test_option in ["-w", "--wait=2"]:
+            ret = runProg(self._restore_command, [test_option], stdin=temp_file.name)
+            if ret[0] == 0 and "invalid option" not in ret[1] \
+                           and "unrecognized option" not in ret[1]:
+                wait_option = test_option
+                break
+
+        log.debug2("%s: %s will be using %s option.", self.__class__, self._restore_command, wait_option)
+
+        os.unlink(temp_file.name)
 
         return wait_option
 
@@ -381,5 +454,75 @@ class ip4tables(object):
                 in_types = True
         return ret
 
+    def apply_default_rules(self, transaction, log_denied="off"):
+        for table in DEFAULT_RULES:
+            if table not in self.available_tables():
+                continue
+            default_rules = DEFAULT_RULES[table][:]
+            if log_denied != "off" and table in LOG_RULES:
+                default_rules.extend(LOG_RULES[table])
+            prefix = [ "-t", table ]
+            for rule in default_rules:
+                if type(rule) == list:
+                    _rule = prefix + rule
+                else:
+                    _rule = prefix + splitArgs(rule)
+                transaction.add_rule(self.ipv, _rule)
+
 class ip6tables(ip4tables):
     ipv = "ipv6"
+
+    def apply_rpfilter_rules(self, transaction, log_denied=False):
+            transaction.add_rule(self.ipv,
+                                 [ "-I", "PREROUTING", "1", "-t", "raw",
+                                   "-p", "ipv6-icmp",
+                                   "--icmpv6-type=router-advertisement",
+                                   "-j", "ACCEPT" ]) # RHBZ#1058505
+            transaction.add_rule(self.ipv,
+                                 [ "-I", "PREROUTING", "2", "-t", "raw",
+                                   "-m", "rpfilter", "--invert", "-j", "DROP" ])
+            if log_denied != "off":
+                transaction.add_rule(self.ipv,
+                                     [ "-I", "PREROUTING", "2", "-t", "raw",
+                                       "-m", "rpfilter", "--invert",
+                                       "-j", "LOG",
+                                       "--log-prefix", "rpfilter_DROP: " ])
+
+# ipv ebtables also uses this
+#
+def reverse_rule(self, args):
+    """ Inverse valid rule """
+
+    replace_args = {
+        # Append
+        "-A": "-D",
+        "--append": "--delete",
+        # Insert
+        "-I": "-D",
+        "--insert": "--delete",
+        # New chain
+        "-N": "-X",
+        "--new-chain": "--delete-chain",
+    }
+
+    ret_args = args[:]
+
+    for arg in replace_args:
+        try:
+            idx = ret_args.index(arg)
+        except Exception:
+            continue
+
+        if arg in [ "-I", "--insert" ]:
+            # With insert rulenum, then remove it if it is a number
+            # Opt at position idx, chain at position idx+1, [rulenum] at
+            # position idx+2
+            try:
+                int(ret_args[idx+2])
+            except Exception:
+                pass
+            else:
+                ret_args.pop(idx+2)
+
+        ret_args[idx] = replace_args[arg]
+    return ret_args

@@ -42,6 +42,7 @@ BUILT_SOURCES = \
 	$(applet_desktop_DATA) \
 	$(polkit1_action_DATA) \
 	$(gsettings_SCHEMAS) \
+	firewalld-sysctls.conf \
 	firewalld.service
 
 @INTLTOOL_DESKTOP_RULE@
@@ -51,7 +52,7 @@ BUILT_SOURCES = \
 
 all: $(desktop_DATA) $(appdata_DATA) $(applet_desktop_DATA) $(polkit1_action_DATA) $(gsettings_SCHEMAS)
 
-CLEANFILES = *~ *\# .\#* firewalld.service
+CLEANFILES = *~ *\# .\#* firewalld.service firewalld-sysctls.conf
 
 DISTCLEANFILES = \
 	$(desktop_DATA) \
@@ -67,6 +68,7 @@ CONFIG_FILES = \
 	helpers/irc.xml \
 	helpers/netbios-ns.xml \
 	helpers/pptp.xml \
+	helpers/proto-gre.xml \
 	helpers/Q.931.xml \
 	helpers/RAS.xml \
 	helpers/sane.xml \
@@ -123,6 +125,7 @@ CONFIG_FILES = \
 	services/amanda-k5-client.xml \
 	services/bacula-client.xml \
 	services/bacula.xml \
+	services/bgp.xml \
 	services/bitcoin-rpc.xml \
 	services/bitcoin-testnet-rpc.xml \
 	services/bitcoin-testnet.xml \
@@ -131,11 +134,13 @@ CONFIG_FILES = \
 	services/ceph.xml \
 	services/cfengine.xml \
 	services/condor-collector.xml \
+	services/ctdb.xml \
 	services/dhcpv6-client.xml \
 	services/dhcpv6.xml \
 	services/dhcp.xml \
 	services/dns.xml \
 	services/docker-registry.xml \
+	services/docker-swarm.xml \
 	services/dropbox-lansync.xml \
 	services/elasticsearch.xml \
 	services/freeipa-ldaps.xml \
@@ -145,6 +150,8 @@ CONFIG_FILES = \
 	services/ftp.xml \
 	services/ganglia-client.xml \
 	services/ganglia-master.xml \
+	services/git.xml \
+	services/gre.xml \
 	services/high-availability.xml \
 	services/https.xml \
 	services/http.xml \
@@ -153,12 +160,16 @@ CONFIG_FILES = \
 	services/ipp-client.xml \
 	services/ipp.xml \
 	services/ipsec.xml \
+	services/ircs.xml \
+	services/irc.xml \
 	services/iscsi-target.xml \
+	services/jenkins.xml \
 	services/kadmin.xml \
 	services/kerberos.xml \
 	services/kibana.xml \
 	services/klogin.xml \
 	services/kpasswd.xml \
+	services/kprop.xml \
 	services/kshell.xml \
 	services/ldaps.xml \
 	services/ldap.xml \
@@ -166,14 +177,23 @@ CONFIG_FILES = \
 	services/libvirt.xml \
 	services/managesieve.xml \
 	services/mdns.xml \
+	services/minidlna.xml \
+	services/mongodb.xml \
 	services/mosh.xml \
 	services/mountd.xml \
 	services/mssql.xml \
 	services/ms-wbt.xml \
+	services/murmur.xml \
 	services/mysql.xml \
 	services/nfs.xml \
+	services/nfs3.xml \
+	services/nmea-0183.xml \
+	services/nrpe.xml \
 	services/ntp.xml \
 	services/openvpn.xml \
+	services/ovirt-imageio.xml \
+	services/ovirt-storageconsole.xml \
+	services/ovirt-vmconsole.xml \
 	services/pmcd.xml \
 	services/pmproxy.xml \
 	services/pmwebapis.xml \
@@ -188,6 +208,7 @@ CONFIG_FILES = \
 	services/puppetmaster.xml \
 	services/quassel.xml \
 	services/radius.xml \
+	services/redis.xml \
 	services/RH-Satellite-6.xml \
 	services/rpc-bind.xml \
 	services/rsh.xml \
@@ -205,6 +226,8 @@ CONFIG_FILES = \
 	services/spideroak-lansync.xml \
 	services/squid.xml \
 	services/ssh.xml \
+	services/syncthing.xml \
+	services/syncthing-gui.xml \
 	services/synergy.xml \
 	services/syslog-tls.xml \
 	services/syslog.xml \
@@ -214,6 +237,7 @@ CONFIG_FILES = \
 	services/tinc.xml \
 	services/tor-socks.xml \
 	services/transmission-client.xml \
+	services/upnp-client.xml \
 	services/vdsm.xml \
 	services/vnc-server.xml \
 	services/wbem-https.xml \
@@ -221,6 +245,8 @@ CONFIG_FILES = \
 	services/xmpp-client.xml \
 	services/xmpp-local.xml \
 	services/xmpp-server.xml \
+	services/zabbix-agent.xml \
+	services/zabbix-server.xml \
 	zones/block.xml \
 	zones/dmz.xml \
 	zones/drop.xml \
@@ -240,12 +266,16 @@ EXTRA_DIST = \
 	$(CONFIG_FILES) \
 	$(dist_xmlschema_DATA) \
 	firewalld.init \
+	firewalld-sysctls.conf.in \
 	firewalld.service.in \
 	firewalld.sysconfig \
 	macros.firewalld
 
 INSTALL_TARGETS = install-config
 UNINSTALL_TARGETS = uninstall-config
+
+INSTALL_TARGETS += install-modprobe.d
+UNINSTALL_TARGETS += uninstall-modprobe.d
 
 if USE_SYSTEMD
 INSTALL_TARGETS += install-service
@@ -269,9 +299,14 @@ edit = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
 	-e 's|@sbindir[@]|$(sbindir)|g' \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
-	-e 's|@localstatedir[@]|$(localstatedir)|g'
+	-e 's|@localstatedir[@]|$(localstatedir)|g' \
+	-e 's|@MODPROBE[@]|$(MODPROBE)|g' \
+	-e 's|@SYSCTL[@]|$(SYSCTL)|g'
 
 firewalld.service: firewalld.service.in
+	$(edit) $< >$@
+
+firewalld-sysctls.conf: firewalld-sysctls.conf.in
 	$(edit) $< >$@
 
 install-sysconfig:
@@ -305,6 +340,14 @@ install-service: install-sysconfig
 uninstall-service: uninstall-sysconfig
 	rm -f $(DESTDIR)$(SYSTEMD_UNITDIR)/firewalld.service
 	rmdir $(DESTDIR)$(SYSTEMD_UNITDIR) || :
+
+install-modprobe.d:
+	$(MKDIR_P) $(DESTDIR)$(sysconfdir)/modprobe.d
+	$(INSTALL_DATA) firewalld-sysctls.conf $(DESTDIR)$(sysconfdir)/modprobe.d/firewalld-sysctls.conf
+
+uninstall-modprobe.d:
+	rm -f $(DESTDIR)$(sysconfdir)/modprobe.d/firewalld-sysctls.conf
+	rmdir $(DESTDIR)$(sysconfdir)/modprobe.d || :
 
 install-config:
 	$(MKDIR_P) $(DESTDIR)$(sconfdir)
@@ -342,5 +385,7 @@ uninstall-local: $(UNINSTALL_TARGETS)
 
 install-data-hook:
 	cd $(DESTDIR)$(polkit1_actiondir) && \
+		mv org.fedoraproject.FirewallD1.server.policy org.fedoraproject.FirewallD1.server.policy.choice && \
+		mv org.fedoraproject.FirewallD1.desktop.policy org.fedoraproject.FirewallD1.desktop.policy.choice && \
 		rm -f org.fedoraproject.FirewallD1.policy && \
-		$(LN_S) org.fedoraproject.FirewallD1.server.policy org.fedoraproject.FirewallD1.policy
+		$(LN_S) org.fedoraproject.FirewallD1.server.policy.choice org.fedoraproject.FirewallD1.policy

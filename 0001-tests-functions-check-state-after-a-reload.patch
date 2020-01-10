@@ -1,0 +1,28 @@
+From 83f7000d753f6e4c688ca91badc4d73bcf37929f Mon Sep 17 00:00:00 2001
+From: Eric Garver <e@erig.me>
+Date: Mon, 13 Aug 2018 14:39:25 -0400
+Subject: [PATCH 1/4] tests/functions: check state after a reload
+
+To make sure firewalld doesn't get stuck during a reload we should check
+the state as well.
+
+(cherry picked from commit 8b3591c3f238156911bb63dd5622168d21a9ae78)
+---
+ src/tests/functions.at | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/tests/functions.at b/src/tests/functions.at
+index d9b1ce401bb0..02464f3c22df 100644
+--- a/src/tests/functions.at
++++ b/src/tests/functions.at
+@@ -55,6 +55,7 @@ m4_define([FWD_START_FIREWALLD], [
+ 
+ m4_define([FWD_RELOAD], [
+     FWD_CHECK([-q --reload], [$1], [$2], [$3])
++    FWD_CHECK([-q --state], [$4], [$5], [$6])
+ ])
+ 
+ m4_define([FWD_RESTART], [
+-- 
+2.18.0
+

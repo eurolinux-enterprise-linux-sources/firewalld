@@ -7,42 +7,26 @@
 
 Summary: A firewall daemon with D-Bus interface providing a dynamic firewall
 Name: firewalld
-Version: 0.4.4.4
-Release: 15%{?dist}
+Version: 0.5.3
+Release: 5%{?dist}
 URL:     http://www.firewalld.org
 License: GPLv2+
-Source0: https://github.com/t-woerner/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source0: https://github.com/firewalld/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 Patch1: firewalld-0.4.4.3-qt4_applet.patch
 Patch2: firewalld-0.4.4.3-exclude_firewallctl_rhbz#1374799.patch
-Patch3: firewalld-0.4.4.4-support_sctp_and_dccp_rhbz#1429808.patch
-Patch4: firewalld-0.4.4.4-fix_offline_remove_service_from_zone_rhbz#1438127.patch
-Patch5: firewalld-0.4.4.4-fix_get_set_short_description_in_zone_rhbz#1416325.patch
-Patch6: firewalld-0.4.4.4-man_pages_add_sctp_and_dccp_rhbz#1429808.patch
-Patch7: firewalld-0.4.4.4-restore_wait_rhbz#1446162.patch
-Patch8: firewalld-0.4.4.4-ovirt-services_rhbz#1449158.patch
-Patch9: firewalld-0.4.4.4-policy-choice_rhbz#1449754.patch
-Patch10: firewalld-0.4.4.4-translation-update-ja_rhbz#1382652.patch
-Patch11: firewalld-0.4.4.5-ipv6_icmptype_only_rich_rule_fix_rhbz#1459921.patch
-Patch12: firewalld-0.4.4.5-firewall.functions-New-function-get_nf_nat_helpers-rhbz#1452681.patch
-Patch13: firewalld-0.4.4.5-firewall.core.fw-Get-NAT-helpers-and-store-them-inte-rhbz#1452681.patch
-Patch14: firewalld-0.4.4.5-firewall.core.fw_zone-Load-NAT-helpers-with-conntrac-rhbz#1452681.patch
-Patch15: firewalld-0.4.4.5-firewalld.dbus-Add-missing-properties-nf_conntrach_h-rhbz#1452681.patch
-Patch16: firewalld-0.4.4.5-D-Bus-interfaces-Fix-GetAll-for-interfaces-without-p-rhbz#1452017.patch
-Patch17: firewalld-0.4.4.5-firewall.server.firewalld-New-property-for-NAT-helpe-rhbz#1452681.patch
-Patch18: firewalld-0.4.4.6-Add-NFSv3-service.patch
-Patch19: firewalld-0.4.4.6-Reload-nf_conntrack-sysctls-after-the-module-is-load-rhbz#1462977.patch
-Patch20: firewalld-0.4.4.6-Add-missing-ports-to-RH-Satellite-6-service.patch
-Patch21: firewalld-0.4.4.6-core-Log-unsupported-ICMP-types-as-informational-onl.patch
-Patch22: firewalld-0.4.4.6-doc-firewall-cmd-Document-query-options-return-codes.patch
-Patch23: firewalld-0.4.4.6-doc-firewall-cmd-Document-quirk-in-reload-option.patch
-Patch24: firewalld-0.4.4.6-firewall-cmd-Use-colors-only-if-output-is-a-TTY.patch
-Patch25: firewalld-0.4.4.6-firewall-offline-cmd-Don-t-require-root-for-help-out.patch
-Patch26: firewalld-0.4.4.7-Fix-and-improve-firewalld-sysctls.conf.patch
-Patch27: firewalld-0.4.4.7-firewalld-also-reload-dbus-config-interface-for-glob.patch
-Patch28: firewalld-0.4.4.7-services-high-availability-Add-port-9929.patch
-Patch29: firewalld-0.6.1-firewall.core.fw_nm-avoid-iterating-NM-devices-conne.patch
-Patch30: firewalld-0.6.1-firewall.core.fw_nm-identify-the-connections-by-uuid.patch
-Patch31: firewalld-0.6.1-firewall.core.fw_nm-ignore-generated-connections.patch
+Patch3: 0001-ipset-check-type-when-parsing-ipset-definition.patch
+Patch4: 0002-firewall-core-io-functions-add-check_config.patch
+Patch5: 0003-firewall-offline-cmd-add-check-config-option.patch
+Patch6: 0004-firewall-cmd-add-check-config-option.patch
+Patch7: 0005-tests-firewall-cmd-exercise-check-config.patch
+Patch8: 0001-firewall.core.fw_nm-avoid-iterating-NM-devices-conne.patch
+Patch9: 0002-firewall.core.fw_nm-identify-the-connections-by-uuid.patch
+Patch10: 0003-firewall.core.fw_nm-ignore-generated-connections.patch
+Patch11: 0001-tests-functions-check-state-after-a-reload.patch
+Patch12: 0002-fw-on-restart-set-policy-from-same-function.patch
+Patch13: 0003-fw-if-failure-occurs-during-startup-set-state-to-FAI.patch
+Patch14: 0001-fw-if-startup-fails-on-reload-reapply-non-perm-confi.patch
+Patch15: 0002-fw-If-direct-rules-fail-to-apply-add-a-Direct-label-.patch
 
 BuildArch: noarch
 BuildRequires: desktop-file-utils
@@ -152,41 +136,7 @@ The firewall configuration application provides an configuration interface for
 firewalld.
 
 %prep
-%setup -q
-%patch1 -p1 -b .qt4_applet
-%patch2 -p1 -b .exclude_firewallctl_rhbz#1374799
-%patch3 -p1 -b .support_sctp_and_dccp_rhbz#1429808
-%patch4 -p1 -b .fix_offline_remove_service_from_zone_rhbz#1438127
-%patch5 -p1 -b .fix_get_set_short_description_in_zone_rhbz#1416325
-%patch6 -p1 -b .man_pages_add_sctp_and_dccp_rhbz#1429808
-%patch7 -p1 -b .restore_wait_rhbz#1446162
-# Do not create backup files with -b .ovirt-services_rhbz#1449158 for patch8
-%patch8 -p1
-%patch9 -p1 -b .policy-choice_rhbz#1449754
-%patch10 -p1 -b .translation-update-ja_rhbz#1382652
-%patch11 -p1 -b .ipv6_icmptype_only_rich_rule_fix_rhbz#1459921
-%patch12 -p1 -b .functions-New-function-get_nf_nat_helpers-rhbz#1452681
-%patch13 -p1 -b .core.fw-Get-NAT-helpers-and-store-them-inte-rhbz#1452681
-%patch14 -p1 -b .core.fw_zone-Load-NAT-helpers-with-conntrac-rhbz#1452681
-%patch15 -p1 -b .dbus-Add-missing-properties-nf_conntrach_h-rhbz#1452681
-%patch16 -p1 -b .D-Bus-interfaces-Fix-GetAll-for-interfaces-without-p-rhbz#1452017
-%patch17 -p1 -b .server.firewalld-New-property-for-NAT-helpe-rhbz#1452681
-# Do not create backup files with -b .Add-NFSv3-service_rhbz#1462088 for patch18
-%patch18 -p1
-%patch19 -p1 -b .Reload-nf_conntrack-sysctls-after-the-module-rhbz#1462977
-# Do not create backup files with -b .Add-missing-ports-to-RH-Satellite-6-service for patch20
-%patch20 -p1
-%patch21 -p1
-%patch22 -p1
-%patch23 -p1
-%patch24 -p1
-%patch25 -p1
-%patch26 -p1 -b .Fix-and-improve-firewalld-sysctls.conf
-%patch27 -p1 -b .firewalld-also-reload-dbus-config-interface-for-glob
-%patch28 -p1
-%patch29 -p1
-%patch30 -p1
-%patch31 -p1
+%autosetup -p1
 ./autogen.sh
 
 %if 0%{?with_python3}
@@ -299,8 +249,6 @@ fi
 %attr(0750,root,root) %dir %{_sysconfdir}/firewalld/services
 %attr(0750,root,root) %dir %{_sysconfdir}/firewalld/zones
 %dir %{_datadir}/firewalld
-%dir %{_datadir}/firewalld/tests
-%{_datadir}/firewalld/tests
 %defattr(0644,root,root)
 %config(noreplace) %{_sysconfdir}/sysconfig/firewalld
 #%attr(0755,root,root) %{_initrddir}/firewalld
@@ -382,8 +330,20 @@ fi
 %{_mandir}/man1/firewall-config*.1*
 
 %changelog
-* Fri Aug 10 2018 Eric Garver <egarver@redhat.com> - 0.4.4.4-15
+* Fri Aug 17 2018 Eric Garver <egarver@redhat.com> - 0.5.3-5
+- even if startup failed, reapply non-permanent interface to zone assignments
+
+* Thu Aug 16 2018 Eric Garver <egarver@redhat.com> - 0.5.3-4
+- backport patches to enter failed state if startup fails
+
+* Thu Jul 19 2018 Eric Garver <egarver@redhat.com> - 0.5.3-3
 - backport patches to avoid NM for generated connections
+
+* Tue Jun 12 2018 Eric Garver <egarver@redhat.com> - 0.5.3-2
+- backport patches for --check-config option
+
+* Tue May 15 2018 Eric Garver <egarver@redhat.com> - 0.5.3-1
+- rebase package to v0.5.3
 
 * Tue Dec 12 2017 Eric Garver <egarver@redhat.com> - 0.4.4.4-14
 - services/high-availability: Add port 9929 (RHBZ#1486143)

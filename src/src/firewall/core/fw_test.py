@@ -27,8 +27,8 @@ from firewall import config
 from firewall import functions
 from firewall.core.fw_icmptype import FirewallIcmpType
 from firewall.core.fw_service import FirewallService
-from firewall.core.fw_zone import FirewallZone
-from firewall.core.fw_direct import FirewallDirect
+from firewall.core.fw_zone import FirewallZoneIPTables
+from firewall.core.fw_direct import FirewallDirectIPTables
 from firewall.core.fw_config import FirewallConfig
 from firewall.core.fw_policies import FirewallPolicies
 from firewall.core.fw_ipset import FirewallIPSet
@@ -68,8 +68,8 @@ class Firewall_test(object):
 
         self.icmptype = FirewallIcmpType(self)
         self.service = FirewallService(self)
-        self.zone = FirewallZone(self)
-        self.direct = FirewallDirect(self)
+        self.zone = FirewallZoneIPTables(self)
+        self.direct = FirewallDirectIPTables(self)
         self.config = FirewallConfig(self)
         self.policies = FirewallPolicies()
         self.ipset = FirewallIPSet(self)
@@ -78,7 +78,7 @@ class Firewall_test(object):
         self.__init_vars()
 
     def __repr__(self):
-        return '%s(%r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r)' % \
+        return '%s(%r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r)' % \
             (self.__class__, self.ip4tables_enabled, self.ip6tables_enabled,
              self.ebtables_enabled, self._state, self._panic,
              self._default_zone, self._module_refcount, self._marks,
@@ -252,8 +252,8 @@ class Firewall_test(object):
             try:
                 obj.read()
             except Exception as msg:
-                log.debug1("Failed to load direct rules file '%s': %s",
-                           config.FIREWALLD_DIRECT, msg)
+                log.error("Failed to load direct rules file '%s': %s",
+                          config.FIREWALLD_DIRECT, msg)
         self.config.set_direct(copy.deepcopy(obj))
 
         self._default_zone = self.check_zone(default_zone)
@@ -317,7 +317,7 @@ class Firewall_test(object):
                     # add a deep copy to the configuration interface
                     self.config.add_service(copy.deepcopy(obj))
                 elif reader_type == "zone":
-                    obj = zone_reader(filename, path)
+                    obj = zone_reader(filename, path, no_check_name=combine)
                     if combine:
                         # Change name for permanent configuration
                         obj.name = "%s/%s" % (
@@ -456,9 +456,10 @@ class Firewall_test(object):
     def check_tcpudp(self, protocol):
         if not protocol:
             raise FirewallError(errors.MISSING_PROTOCOL)
-        if not protocol in [ "tcp", "udp" ]:
+        if not protocol in [ "tcp", "udp", "sctp", "dccp" ]:
             raise FirewallError(errors.INVALID_PROTOCOL,
-                                "'%s' not in {'tcp'|'udp'}" % protocol)
+                                "'%s' not in {'tcp'|'udp'|'sctp'|'dccp'}" % \
+                                protocol)
 
     def check_ip(self, ip):
         if not functions.checkIP(ip):

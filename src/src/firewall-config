@@ -89,6 +89,9 @@ class FirewallConfig(object):
         self.connected_label = _("Connection to firewalld established.")
         self.trying_to_connect_label = \
             _("Trying to connect to firewalld, waiting...")
+        self.failed_to_connect_label = \
+            _("Failed to connect to firewalld. Please make sure that the "
+              "service has been started correctly and try again.")
         self.changes_applied_label = _("Changes applied.")
         self.used_by_label = _("Used by network connection '%s'")
         self.default_zone_used_by_label = _("Default zone used by network "
@@ -98,6 +101,7 @@ class FirewallConfig(object):
 
         self.settings = Gio.Settings.new(FIREWALL_CONFIG_SCHEMA)
         self.modified_timer = None
+        self.connection_timer = None
 
         self.zone_connection_editors = { }
         self.zone_interface_editors = { }
@@ -180,7 +184,7 @@ class FirewallConfig(object):
         self.lockdownContextView = builder.get_object("lockdownContextView")
         self.lockdownContextStore = Gtk.ListStore(GObject.TYPE_STRING)
         self.lockdownContextView.append_column(
-            Gtk.TreeViewColumn("Context", Gtk.CellRendererText(), text=0))
+            Gtk.TreeViewColumn(_("Context"), Gtk.CellRendererText(), text=0))
         self.lockdownContextView.set_model(self.lockdownContextStore)
         self.lockdownContextView.get_selection().connect( \
             "changed", self.change_lockdown_context_selection_cb)
@@ -199,7 +203,7 @@ class FirewallConfig(object):
         self.lockdownCommandView = builder.get_object("lockdownCommandView")
         self.lockdownCommandStore = Gtk.ListStore(GObject.TYPE_STRING)
         self.lockdownCommandView.append_column(
-            Gtk.TreeViewColumn("Command line", Gtk.CellRendererText(), text=0))
+            Gtk.TreeViewColumn(_("Command line"), Gtk.CellRendererText(), text=0))
         self.lockdownCommandView.set_model(self.lockdownCommandStore)
         self.lockdownCommandView.get_selection().connect( \
             "changed", self.change_lockdown_command_selection_cb)
@@ -218,7 +222,7 @@ class FirewallConfig(object):
         self.lockdownUserView = builder.get_object("lockdownUserView")
         self.lockdownUserStore = Gtk.ListStore(GObject.TYPE_STRING)
         self.lockdownUserView.append_column(
-            Gtk.TreeViewColumn("User name", Gtk.CellRendererText(), text=0))
+            Gtk.TreeViewColumn(_("User name"), Gtk.CellRendererText(), text=0))
         self.lockdownUserView.set_model(self.lockdownUserStore)
         self.lockdownUserView.get_selection().connect( \
             "changed", self.change_lockdown_user_selection_cb)
@@ -237,7 +241,7 @@ class FirewallConfig(object):
         self.lockdownUidView = builder.get_object("lockdownUidView")
         self.lockdownUidStore = Gtk.ListStore(GObject.TYPE_INT)
         self.lockdownUidView.append_column(
-            Gtk.TreeViewColumn("User id", Gtk.CellRendererText(), text=0))
+            Gtk.TreeViewColumn(_("User id"), Gtk.CellRendererText(), text=0))
         self.lockdownUidView.set_model(self.lockdownUidStore)
         self.lockdownUidView.get_selection().connect( \
             "changed", self.change_lockdown_uid_selection_cb)
@@ -277,9 +281,9 @@ class FirewallConfig(object):
         self.directChainView.append_column(
             Gtk.TreeViewColumn("ipv", Gtk.CellRendererText(), text=0))
         self.directChainView.append_column(
-            Gtk.TreeViewColumn("Table", Gtk.CellRendererText(), text=1))
+            Gtk.TreeViewColumn(_("Table"), Gtk.CellRendererText(), text=1))
         self.directChainView.append_column(
-            Gtk.TreeViewColumn("Chain", Gtk.CellRendererText(), text=2))
+            Gtk.TreeViewColumn(_("Chain"), Gtk.CellRendererText(), text=2))
         self.directChainView.set_model(self.directChainStore)
 
         self.directChainView.get_selection().connect( \
@@ -311,13 +315,13 @@ class FirewallConfig(object):
         self.directRuleView.append_column(
             Gtk.TreeViewColumn("ipv", Gtk.CellRendererText(), text=0))
         self.directRuleView.append_column(
-            Gtk.TreeViewColumn("Table", Gtk.CellRendererText(), text=1))
+            Gtk.TreeViewColumn(_("Table"), Gtk.CellRendererText(), text=1))
         self.directRuleView.append_column(
-            Gtk.TreeViewColumn("Chain", Gtk.CellRendererText(), text=2))
+            Gtk.TreeViewColumn(_("Chain"), Gtk.CellRendererText(), text=2))
         self.directRuleView.append_column(
-            Gtk.TreeViewColumn("Priority", Gtk.CellRendererText(), text=3))
+            Gtk.TreeViewColumn(_("Priority"), Gtk.CellRendererText(), text=3))
         self.directRuleView.append_column(
-            Gtk.TreeViewColumn("Args", Gtk.CellRendererText(), text=4))
+            Gtk.TreeViewColumn(_("Args"), Gtk.CellRendererText(), text=4))
         self.directRuleView.set_model(self.directRuleStore)
 
         self.directRuleView.get_selection().connect( \
@@ -354,7 +358,7 @@ class FirewallConfig(object):
         self.directPassthroughView.append_column(
             Gtk.TreeViewColumn("ipv", Gtk.CellRendererText(), text=0))
         self.directPassthroughView.append_column(
-            Gtk.TreeViewColumn("Args", Gtk.CellRendererText(), text=1))
+            Gtk.TreeViewColumn(_("Args"), Gtk.CellRendererText(), text=1))
         self.directPassthroughView.set_model(self.directPassthroughStore)
 
         self.directPassthroughView.get_selection().connect( \
@@ -927,9 +931,9 @@ class FirewallConfig(object):
         self.interfaceStore = Gtk.ListStore(GObject.TYPE_STRING, # interface
                                             GObject.TYPE_STRING) # comment
         self.interfaceView.append_column(
-            Gtk.TreeViewColumn("Interface", Gtk.CellRendererText(), text=0))
+            Gtk.TreeViewColumn(_("Interface"), Gtk.CellRendererText(), text=0))
         self.interfaceView.append_column(
-            Gtk.TreeViewColumn("Comment", Gtk.CellRendererText(), text=1))
+            Gtk.TreeViewColumn(_("Comment"), Gtk.CellRendererText(), text=1))
         self.interfaceView.set_model(self.interfaceStore)
         self.interfaceView.get_selection().connect(
             "changed", self.change_interface_selection_cb)
@@ -948,7 +952,7 @@ class FirewallConfig(object):
         self.sourceView = builder.get_object("sourceView")
         self.sourceStore = Gtk.ListStore(GObject.TYPE_STRING) # source
         self.sourceView.append_column(
-            Gtk.TreeViewColumn("Source", Gtk.CellRendererText(), text=0))
+            Gtk.TreeViewColumn(_("Source"), Gtk.CellRendererText(), text=0))
         self.sourceView.set_model(self.sourceStore)
         self.sourceView.get_selection().connect(
             "changed", self.change_source_selection_cb)
@@ -1580,7 +1584,7 @@ class FirewallConfig(object):
 
     def _dialog(self, text, msg=None, title=None,
                 message_type=Gtk.MessageType.INFO,
-                buttons=("gtk-close", 1)):
+                buttons=[("gtk-close", 1)]):
         dialog = Gtk.MessageDialog(parent=None, flags=0,
                                    message_type=message_type)
         dialog.set_markup(text)
@@ -1614,7 +1618,16 @@ class FirewallConfig(object):
                         buttons=(("gtk-ok", 0),("gtk-quit", 1))) == 1:
             self.onQuit()
 
+    def connection_failed(self, msg):
+        if self._dialog("<b>"+_("Error")+"</b>",
+                        message_type=Gtk.MessageType.ERROR, msg=msg,
+                        buttons=[("gtk-quit", 1)]) == 1:
+            self.onQuit()
+
     def connection_changed(self):
+        if self.connection_timer:
+                GLib.source_remove(self.connection_timer)
+                self.connection_timer = None
         if self.fw.connected:
             self.fw.authorizeAll()
             self.statusLabel.set_text(self.connected_label)
@@ -1670,6 +1683,9 @@ class FirewallConfig(object):
             self.waitingWindow.show()
             self.waitingWindowLabel.set_text(self.trying_to_connect_label)
             self.waitingWindowSpinner.start()
+
+            self.connection_timer = GLib.timeout_add_seconds(
+                15, self.connection_failed, self.failed_to_connect_label)
 
         self.update_active_zones()
         self.mainPaned.set_sensitive(self.fw.connected)
@@ -4970,7 +4986,7 @@ class FirewallConfig(object):
         self.forwardDialogLocalCheck.set_active(True)
         self.forwardDialogLocalCheck.set_active(False)
         self.forwardDialogToPortCheck.set_active(False)
-        self.forwardDialog.family = "ipv4"
+        self.forwardDialog.family = None
 
         old_port = None
         old_proto = None

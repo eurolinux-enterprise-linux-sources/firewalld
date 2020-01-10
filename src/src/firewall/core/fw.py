@@ -32,12 +32,12 @@ from firewall.core import ipset
 from firewall.core import modules
 from firewall.core.fw_icmptype import FirewallIcmpType
 from firewall.core.fw_service import FirewallService
-from firewall.core.fw_zone import FirewallZone
-from firewall.core.fw_direct import FirewallDirect
+from firewall.core.fw_zone import FirewallZoneIPTables
+from firewall.core.fw_direct import FirewallDirectIPTables
 from firewall.core.fw_config import FirewallConfig
 from firewall.core.fw_policies import FirewallPolicies
 from firewall.core.fw_ipset import FirewallIPSet
-from firewall.core.fw_transaction import FirewallTransaction, reverse_rule
+from firewall.core.fw_transaction import FirewallTransaction
 from firewall.core.fw_helper import FirewallHelper
 from firewall.core.logger import log
 from firewall.core.io.firewalld_conf import firewalld_conf
@@ -81,8 +81,8 @@ class Firewall(object):
 
         self.icmptype = FirewallIcmpType(self)
         self.service = FirewallService(self)
-        self.zone = FirewallZone(self)
-        self.direct = FirewallDirect(self)
+        self.zone = FirewallZoneIPTables(self)
+        self.direct = FirewallDirectIPTables(self)
         self.config = FirewallConfig(self)
         self.policies = FirewallPolicies()
         self.ipset = FirewallIPSet(self)
@@ -114,6 +114,7 @@ class Firewall(object):
         self._automatic_helpers = config.FALLBACK_AUTOMATIC_HELPERS
         self.nf_conntrack_helper_setting = 0
         self.nf_conntrack_helpers = { }
+        self.nf_nat_helpers = { }
 
     def individual_calls(self):
         return self._individual_calls
@@ -203,8 +204,18 @@ class Firewall(object):
                     log.debug1("  %s: %s", key, ", ".join(values))
             else:
                 log.debug1("No conntrack helpers supported by the kernel.")
+
+            self.nf_nat_helpers = functions.get_nf_nat_helpers()
+            if len(self.nf_nat_helpers) > 0:
+                log.debug1("NAT helpers supported by the kernel:")
+                for key,values in self.nf_nat_helpers.items():
+                    log.debug1("  %s: %s", key, ", ".join(values))
+            else:
+                log.debug1("No NAT helpers supported by the kernel.")
+
         else:
             self.nf_conntrack_helpers = { }
+            self.nf_nat_helpers = { }
             log.warning("modinfo command is missing, not able to detect conntrack helpers.")
 
     def _start(self, reload=False, complete_reload=False):
@@ -359,8 +370,8 @@ class Firewall(object):
             try:
                 obj.read()
             except Exception as msg:
-                log.debug1("Failed to load direct rules file '%s': %s",
-                           config.FIREWALLD_DIRECT, msg)
+                log.error("Failed to load direct rules file '%s': %s",
+                          config.FIREWALLD_DIRECT, msg)
         self.direct.set_permanent_config(obj)
         self.config.set_direct(copy.deepcopy(obj))
 
@@ -429,13 +440,11 @@ class Firewall(object):
 
         # apply direct chains, rules and passthrough rules
         if self.direct.has_configuration():
-            transaction.enable_generous_mode()
             log.debug1("Applying direct chains rules and passthrough rules")
             self.direct.apply_direct(transaction)
 
             # Execute transaction
             transaction.execute(True)
-            transaction.disable_generous_mode()
             transaction.clear()
 
         del transaction
@@ -491,7 +500,7 @@ class Firewall(object):
                     try:
                         self.icmptype.add_icmptype(obj)
                     except FirewallError as error:
-                        log.warning("%s: %s, ignoring for run-time." % \
+                        log.info1("%s: %s, ignoring for run-time." % \
                                     (obj.name, str(error)))
                     # add a deep copy to the configuration interface
                     self.config.add_icmptype(copy.deepcopy(obj))
@@ -509,7 +518,7 @@ class Firewall(object):
                     # add a deep copy to the configuration interface
                     self.config.add_service(copy.deepcopy(obj))
                 elif reader_type == "zone":
-                    obj = zone_reader(filename, path)
+                    obj = zone_reader(filename, path, no_check_name=combine)
                     if combine:
                         # Change name for permanent configuration
                         obj.name = "%s/%s" % (
@@ -660,35 +669,13 @@ class Firewall(object):
 
     # apply default rules
     def __apply_default_rules(self, ipv, transaction):
-        default_rules = { }
-
-        if ipv in [ "ipv4", "ipv6" ]:
-            x = ipXtables
+        if ipv is "ipv4":
+            x = self.ip4tables_backend
+        elif ipv is "ipv6":
+            x = self.ip6tables_backend
         else:
-            x = ebtables
-        for table in x.DEFAULT_RULES:
-            default_rules[table] = x.DEFAULT_RULES[table][:]
-
-        if self._log_denied != "off":
-            for table in x.LOG_RULES:
-                default_rules.setdefault(table, []).extend(x.LOG_RULES[table])
-
-        for table in default_rules:
-            if table not in self.get_available_tables(ipv):
-                continue
-            prefix = [ "-t", table ]
-            for rule in default_rules[table]:
-                if type(rule) == list:
-                    _rule = prefix + rule
-                else:
-                    _rule = prefix + functions.splitArgs(rule)
-                #if self._individual_calls or \
-                #   (ipv == "eb" and not
-                #    self.ebtables_backend.restore_noflush_option):
-                #    self.rule(ipv, _rule)
-                #else:
-                #    transaction.add_rule(ipv, _rule)
-                transaction.add_rule(ipv, _rule)
+            x = self.ebtables_backend
+        x.apply_default_rules(transaction, self._log_denied)
 
     def apply_default_rules(self, use_transaction=None):
         if use_transaction is None:
@@ -707,22 +694,7 @@ class Firewall(object):
             # Start new transaction
             transaction.clear()
 
-            # here is no check for ebtables.restore_noflush_option needed
-            # as ebtables is not used in here
-            transaction.add_rule("ipv6",
-                                 [ "-I", "PREROUTING", "1", "-t", "raw",
-                                   "-p", "ipv6-icmp",
-                                   "--icmpv6-type=router-advertisement",
-                                   "-j", "ACCEPT" ]) # RHBZ#1058505
-            transaction.add_rule("ipv6",
-                                 [ "-I", "PREROUTING", "2", "-t", "raw",
-                                   "-m", "rpfilter", "--invert", "-j", "DROP" ])
-            if self._log_denied != "off":
-                transaction.add_rule("ipv6",
-                                     [ "-I", "PREROUTING", "2", "-t", "raw",
-                                       "-m", "rpfilter", "--invert",
-                                       "-j", "LOG",
-                                       "--log-prefix", "rpfilter_DROP: " ])
+            self.ip6tables_backend.apply_rpfilter_rules(transaction, self._log_denied)
 
             # Execute ipv6_rpfilter transaction, it might fail
             try:
@@ -796,48 +768,6 @@ class Firewall(object):
     # rule function used in handle_ functions
 
     def rule(self, ipv, rule):
-        # replace %%REJECT%%
-        try:
-            i = rule.index("%%REJECT%%")
-        except ValueError:
-            pass
-        else:
-            if ipv in [ "ipv4", "ipv6" ]:
-                rule[i:i+1] = [ "REJECT", "--reject-with",
-                                ipXtables.DEFAULT_REJECT_TYPE[ipv] ]
-            else:
-                raise FirewallError(errors.EBTABLES_NO_REJECT,
-                                    "'%s' not in {'ipv4'|'ipv6'}" % ipv)
-
-        # replace %%ICMP%%
-        try:
-            i = rule.index("%%ICMP%%")
-        except ValueError:
-            pass
-        else:
-            if ipv in [ "ipv4", "ipv6" ]:
-                rule[i] = ipXtables.ICMP[ipv]
-            else:
-                raise FirewallError(errors.INVALID_IPV,
-                                    "'%s' not in {'ipv4'|'ipv6'}" % ipv)
-
-        # replace %%LOGTYPE%%
-        try:
-            i = rule.index("%%LOGTYPE%%")
-        except ValueError:
-            pass
-        else:
-            if self._log_denied == "off":
-                return ""
-            if ipv not in [ "ipv4", "ipv6" ]:
-                raise FirewallError(errors.INVALID_IPV,
-                                    "'%s' not in {'ipv4'|'ipv6'}" % ipv)
-            if self._log_denied in [ "unicast", "broadcast", "multicast" ]:
-                rule[i:i+1] = [ "-m", "pkttype", "--pkt-type",
-                                self._log_denied ]
-            else:
-                rule.pop(i)
-
         # remove leading and trailing '"' for use with execve
         i = 0
         while i < len(rule):
@@ -849,15 +779,15 @@ class Firewall(object):
         if ipv == "ipv4":
             # do not call if disabled
             if self.ip4tables_enabled:
-                return self.ip4tables_backend.set_rule(rule)
+                return self.ip4tables_backend.set_rule(rule, self._log_denied)
         elif ipv == "ipv6":
             # do not call if disabled
             if self.ip6tables_enabled:
-                return self.ip6tables_backend.set_rule(rule)
+                return self.ip6tables_backend.set_rule(rule, self._log_denied)
         elif ipv == "eb":
             # do not call if disabled
             if self.ebtables_enabled:
-                return self.ebtables_backend.set_rule(rule)
+                return self.ebtables_backend.set_rule(rule, self._log_denied)
         else:
             raise FirewallError(errors.INVALID_IPV,
                                 "'%s' not in {'ipv4'|'ipv6'|'eb'}" % ipv)
@@ -865,53 +795,7 @@ class Firewall(object):
         return ""
 
     def rules(self, ipv, rules):
-        _rules = [ ]
-
-        for rule in rules:
-            # replace %%REJECT%%
-            try:
-                i = rule.index("%%REJECT%%")
-            except ValueError:
-                pass
-            else:
-                if ipv in [ "ipv4", "ipv6" ]:
-                    rule[i:i+1] = [ "REJECT", "--reject-with",
-                                    ipXtables.DEFAULT_REJECT_TYPE[ipv] ]
-                else:
-                    raise FirewallError(errors.EBTABLES_NO_REJECT,
-                                        "'%s' not in {'ipv4'|'ipv6'}" % ipv)
-
-            # replace %%ICMP%%
-            try:
-                i = rule.index("%%ICMP%%")
-            except ValueError:
-                pass
-            else:
-                if ipv in [ "ipv4", "ipv6" ]:
-                    rule[i] = ipXtables.ICMP[ipv]
-                else:
-                    raise FirewallError(errors.INVALID_IPV,
-                                        "'%s' not in {'ipv4'|'ipv6'}" % ipv)
-
-            # replace %%LOGTYPE%%
-            try:
-                i = rule.index("%%LOGTYPE%%")
-            except ValueError:
-                pass
-            else:
-                if self._log_denied == "off":
-                    continue
-                if ipv not in [ "ipv4", "ipv6" ]:
-                    raise FirewallError(errors.INVALID_IPV,
-                                        "'%s' not in {'ipv4'|'ipv6'}" % ipv)
-                if self._log_denied in [ "unicast", "broadcast",
-                                         "multicast" ]:
-                    rule[i:i+1] = [ "-m", "pkttype", "--pkt-type",
-                                    self._log_denied ]
-                else:
-                    rule.pop(i)
-
-            _rules.append(rule)
+        _rules = rules[:]
 
         backend = None
         if ipv == "ipv4":
@@ -952,14 +836,14 @@ class Firewall(object):
                     log.error(msg)
                     for rule in reversed(_rules[:i]):
                         try:
-                            backend.set_rule(reverse_rule(rule))
+                            backend.set_rule(ipXtables.reverse_rule(rule))
                         except Exception:
                             # ignore errors here
                             pass
                     return False
             return True
         else:
-            return backend.set_rules(_rules)
+            return backend.set_rules(_rules, log_denied=self._log_denied)
 
     # check functions
 
@@ -989,9 +873,10 @@ class Firewall(object):
     def check_tcpudp(self, protocol):
         if not protocol:
             raise FirewallError(errors.MISSING_PROTOCOL)
-        if protocol not in [ "tcp", "udp" ]:
+        if protocol not in [ "tcp", "udp", "sctp", "dccp" ]:
             raise FirewallError(errors.INVALID_PROTOCOL,
-                                "'%s' not in {'tcp'|'udp'}" % protocol)
+                                "'%s' not in {'tcp'|'udp'|'sctp'|'dccp'}" % \
+                                protocol)
 
     def check_ip(self, ip):
         if not functions.checkIP(ip):
@@ -1042,7 +927,7 @@ class Firewall(object):
         _new_dz = self.get_default_zone()
         if _new_dz != _old_dz:
             # if_new_dz has been introduced with the reload, we need to add it
-            # https://github.com/t-woerner/firewalld/issues/53
+            # https://github.com/firewalld/firewalld/issues/53
             if _new_dz not in _zone_interfaces:
                 _zone_interfaces[_new_dz] = { }
             # default zone changed. Move interfaces from old default zone to
@@ -1065,7 +950,7 @@ class Firewall(object):
             else:
                 log.info1("New zone '%s'.", zone)
         if len(_zone_interfaces) > 0:
-            for zone in _zone_interfaces.keys():
+            for zone in list(_zone_interfaces.keys()):
                 log.info1("Lost zone '%s', zone interfaces dropped.", zone)
                 del _zone_interfaces[zone]
         del _zone_interfaces
@@ -1129,9 +1014,6 @@ class Firewall(object):
             self._log_denied = value
             self._firewalld_conf.set("LogDenied", value)
             self._firewalld_conf.write()
-
-            # now reload the firewall
-            self.reload()
         else:
             raise FirewallError(errors.ALREADY_SET, value)
 
@@ -1150,9 +1032,6 @@ class Firewall(object):
             self._automatic_helpers = value
             self._firewalld_conf.set("AutomaticHelpers", value)
             self._firewalld_conf.write()
-
-            # now reload the firewall
-            self.reload()
         else:
             raise FirewallError(errors.ALREADY_SET, value)
 

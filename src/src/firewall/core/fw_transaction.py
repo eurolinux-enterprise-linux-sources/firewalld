@@ -21,87 +21,13 @@
 
 """Transaction classes for firewalld"""
 
-__all__ = [ "check_rule", "reverse_rule",
-            "FirewallTransaction", "FirewallZoneTransaction" ]
+__all__ = [ "FirewallTransaction", "FirewallZoneTransaction" ]
 
 from firewall.core.logger import log
 from firewall import errors
 from firewall.errors import FirewallError
 from firewall.fw_types import LastUpdatedOrderedDict
-
-# function check_rule
-
-def check_rule(args):
-    """ Check if rule is valid (only add, insert and new chain rules are
-    allowed) """
-
-    used_set = set(args)
-    not_allowed_set = set(["-D", "--delete",          # delete rule
-                           "-R", "--replace",         # replace rule
-                           "-L", "--list",            # list rule
-                           "-S", "--list-rules",      # print rules
-                           "-F", "--flush",           # flush rules
-                           "-Z", "--zero",            # zero rules
-                           "-X", "--delete-chain",    # delete chain
-                           "-P", "--policy",          # policy
-                           "-E", "--rename-chain"])   # rename chain)
-    # intersection of args and not_allowed is not empty, i.e.
-    # something from args is not allowed
-    if len(used_set & not_allowed_set) > 0:
-        raise FirewallError(errors.INVALID_RULE, "arg '%s' is not allowed" % \
-                            list(used_set & not_allowed_set)[0])
-
-    # args need to contain one of -A, -I, -C, -N
-    needed_set = set([ "-A", "--append",
-                       "-I", "--insert",
-                       "-C", "--check",
-                       "-N", "--new-chain" ])
-    # empty intersection of args and needed, i.e.
-    # none from args contains any needed command
-    if len(used_set & needed_set) == 0:
-        raise FirewallError(errors.INVALID_RULE,
-                            "no '-A', '-I', '-C' or '-N' arg")
-
-# function reverse_rule
-
-def reverse_rule(args):
-    """ Inverse valid rule """
-
-    replace_args = {
-        # Append
-        "-A": "-D",
-        "--append": "--delete",
-        # Insert
-        "-I": "-D",
-        "--insert": "--delete",
-        # New chain
-        "-N": "-X",
-        "--new-chain": "--delete-chain",
-    }
-
-    ret_args = args[:]
-
-    for arg in replace_args:
-        try:
-            idx = ret_args.index(arg)
-        except Exception:
-            continue
-
-        if arg in [ "-I", "--insert" ]:
-            # With insert rulenum, then remove it if it is a number
-            # Opt at position idx, chain at position idx+1, [rulenum] at
-            # position idx+2
-            try:
-                int(ret_args[idx+2])
-            except Exception:
-                pass
-            else:
-                ret_args.pop(idx+2)
-
-        ret_args[idx] = replace_args[arg]
-    return ret_args
-
-# class FirewallTransaction
+from firewall.core.ipXtables import reverse_rule
 
 class SimpleFirewallTransaction(object):
     """Base class for FirewallTransaction and FirewallZoneTransaction"""
@@ -112,24 +38,15 @@ class SimpleFirewallTransaction(object):
         self.pre_funcs = [ ] # [ (func, args),.. ]
         self.post_funcs = [ ] # [ (func, args),.. ]
         self.fail_funcs = [ ] # [ (func, args),.. ]
-        self.generous_mode = False
 
     def clear(self):
         self.rules.clear()
         del self.pre_funcs[:]
         del self.post_funcs[:]
         del self.fail_funcs[:]
-        self.generous_mode = False
-
-    def enable_generous_mode(self):
-        self.generous_mode = True
-
-    def disable_generous_mode(self):
-        self.generous_mode = False
 
     def add_rule(self, ipv, rule):
-        if ipv not in self.rules or rule not in self.rules[ipv]:
-            self.rules.setdefault(ipv, [ ]).append(rule)
+        self.rules.setdefault(ipv, [ ]).append(rule)
 
     def query_rule(self, ipv, rule):
         return ipv in self.rules and rule in self.rules[ipv]
@@ -176,28 +93,17 @@ class SimpleFirewallTransaction(object):
 
         # stage 1: apply rules
         error = False
+        errorMsg = ""
         done = [ ]
         for ipv in rules:
             try:
                 self.fw.rules(ipv, rules[ipv])
             except Exception as msg:
                 error = True
-                if not self.generous_mode:
-                    log.warning(msg)
+                errorMsg = msg
+                log.error(msg)
             else:
                 done.append(ipv)
-
-        if error and self.generous_mode:
-            for ipv in rules:
-                if ipv in done:
-                    continue
-                for rule in rules[ipv]:
-                    try:
-                        self.fw.rule(ipv, rule)
-                    except Exception as msg:
-                        log.warning(msg)
-                done.append(ipv)
-            error = False
 
         # stage 2: load modules
         if not error:
@@ -206,6 +112,7 @@ class SimpleFirewallTransaction(object):
                 (cleanup_modules, msg) = module_return
                 if cleanup_modules is not None:
                     error = True
+                    errorMsg = msg
                     self.fw.handle_modules(cleanup_modules, not enable)
 
         # error case: revert rules
@@ -228,7 +135,7 @@ class SimpleFirewallTransaction(object):
                     log.error("Calling fail func %s(%s) failed: %s" % \
                               (func, args, msg))
 
-            raise FirewallError(errors.COMMAND_FAILED)
+            raise FirewallError(errors.COMMAND_FAILED, errorMsg)
 
         # post
         self.post()

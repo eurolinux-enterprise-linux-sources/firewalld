@@ -21,6 +21,7 @@
 
 __all__ = [ "FirewallIcmpType" ]
 
+import copy
 from firewall.core.logger import log
 from firewall import errors
 from firewall.errors import FirewallError
@@ -66,7 +67,7 @@ class FirewallIcmpType(object):
             else:
                 supported_icmps = [ ]
             if obj.name.lower() not in supported_icmps:
-                log.warning("ICMP type '%s' is not supported by the kernel for %s." % (obj.name, ipv))
+                log.info1("ICMP type '%s' is not supported by the kernel for %s." % (obj.name, ipv))
                 ipvs.remove(ipv)
         if len(ipvs) != len(orig_ipvs):
             if len(ipvs) < 1:

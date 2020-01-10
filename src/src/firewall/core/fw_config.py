@@ -43,7 +43,7 @@ class FirewallConfig(object):
         return '%s(%r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r, %r)' % \
             (self.__class__,
              self._ipsets, self._icmptypes, self._services, self._zones,
-             self.helpers,
+             self._helpers,
              self._builtin_ipsets, self._builtin_icmptypes,
              self._builtin_services, self._builtin_zones, self._builtin_helpers,
              self._firewalld_conf, self._policies, self._direct)
@@ -390,7 +390,7 @@ class FirewallConfig(object):
             return obj
 
     def new_icmptype(self, name, conf):
-        if name in self._icmptypes:
+        if name in self._icmptypes or name in self._builtin_icmptypes:
             raise FirewallError(errors.NAME_CONFLICT,
                                 "new_icmptype(): '%s'" % name)
 
