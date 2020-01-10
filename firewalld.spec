@@ -8,7 +8,7 @@
 Summary: A firewall daemon with D-Bus interface providing a dynamic firewall
 Name: firewalld
 Version: 0.6.3
-Release: 2%{?dist}.1
+Release: 2%{?dist}.2
 URL:     http://www.firewalld.org
 License: GPLv2+
 Source0: https://github.com/firewalld/firewalld/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -51,6 +51,8 @@ Patch36: 0036-fix-tests-functions-ignore-warnings-about-missing-ip.patch
 Patch37: 0037-fix-tests-guard-occurrences-of-IPv6.patch
 Patch38: 0038-fix-tests-update-package.m4-if-makefile-changed.patch
 Patch39: 0039-fix-tests-functions-define-HOST_SUPPORTS_IP6TABLES-v.patch
+Patch40: 0040-fix-Revert-ebtables-drop-support-for-broute-table.patch
+Patch41: 0041-fix-ebtables-don-t-use-tables-that-aren-t-available.patch
 
 BuildArch: noarch
 BuildRequires: desktop-file-utils
@@ -351,6 +353,9 @@ fi
 %{_mandir}/man1/firewall-config*.1*
 
 %changelog
+* Mon Sep 30 2019 Eric Garver <egarver@redhat.com> - 0.6.3-2.el7_7.2
+- fix: Revert "ebtables: drop support for broute table"
+
 * Wed Aug 21 2019 Eric Garver <egarver@redhat.com> - 0.6.3-2.el7_7.1
 - backport fix to allow disabling IPv6
 

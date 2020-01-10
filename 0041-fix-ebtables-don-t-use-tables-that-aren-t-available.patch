@@ -1,0 +1,36 @@
+From 6a5d8aa720479781b122f999e4a4180c84c39be5 Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Fri, 20 Sep 2019 08:47:22 -0400
+Subject: [PATCH 41/41] fix: ebtables: don't use tables that aren't available
+
+(cherry picked from commit 53fa559352156ae4c33613e2e45eb5355e1e86b9)
+(cherry picked from commit 3b7dd4993f18c9090f3c307fd40919cc8b2616bc)
+---
+ src/firewall/core/ebtables.py | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/firewall/core/ebtables.py b/src/firewall/core/ebtables.py
+index 65688571ce31..b17e43dadf20 100644
+--- a/src/firewall/core/ebtables.py
++++ b/src/firewall/core/ebtables.py
+@@ -229,6 +229,8 @@ class ebtables(object):
+     def build_flush_rules(self):
+         rules = []
+         for table in BUILT_IN_CHAINS.keys():
++            if table not in self.get_available_tables():
++                continue
+             # Flush firewall rules: -F
+             # Delete firewall chains: -X
+             # Set counter to zero: -Z
+@@ -239,6 +241,8 @@ class ebtables(object):
+     def build_set_policy_rules(self, policy):
+         rules = []
+         for table in BUILT_IN_CHAINS.keys():
++            if table not in self.get_available_tables():
++                continue
+             for chain in BUILT_IN_CHAINS[table]:
+                 rules.append(["-t", table, "-P", chain, policy])
+         return rules
+-- 
+2.20.1
+

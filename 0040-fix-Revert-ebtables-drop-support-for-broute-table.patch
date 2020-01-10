@@ -1,0 +1,56 @@
+From e490ca17f5a61ef8c28ada20fec922acc300640e Mon Sep 17 00:00:00 2001
+From: Eric Garver <eric@garver.life>
+Date: Fri, 20 Sep 2019 08:39:05 -0400
+Subject: [PATCH 40/41] fix: Revert "ebtables: drop support for broute table"
+
+This reverts commit 0e78dea21ffb03ea2e51df6158471b9cbd6652c9.
+
+Apparently there _are_ users of this table. Let's revert this change and
+be a little smarter about not attempting to use the table if it's not
+available (ebtables-nft). We'll still fail if the user has direct rules
+for this table, but at least the default ruleset will work.
+
+(cherry picked from commit ca34c9e051807d62371d5e980210f11859cab360)
+(cherry picked from commit b80835f5af8ad5c4c39cc8b78ec5314963926a8f)
+---
+ src/firewall-config.in        | 4 ++++
+ src/firewall/core/ebtables.py | 1 +
+ 2 files changed, 5 insertions(+)
+
+diff --git a/src/firewall-config.in b/src/firewall-config.in
+index c19541b0ce82..91ce89ab72a0 100755
+--- a/src/firewall-config.in
++++ b/src/firewall-config.in
+@@ -7653,6 +7653,8 @@ class FirewallConfig(object):
+             self.directChainDialogTableCombobox.append_text("mangle")
+             self.directChainDialogTableCombobox.append_text("raw")
+             self.directChainDialogTableCombobox.append_text("security")
++        else:
++            self.directChainDialogTableCombobox.append_text("broute")
+ 
+         combobox_select_text(self.directChainDialogTableCombobox, old_table)
+ 
+@@ -7807,6 +7809,8 @@ class FirewallConfig(object):
+             self.directRuleDialogTableCombobox.append_text("mangle")
+             self.directRuleDialogTableCombobox.append_text("raw")
+             self.directRuleDialogTableCombobox.append_text("security")
++        else:
++            self.directRuleDialogTableCombobox.append_text("broute")
+ 
+         combobox_select_text(self.directRuleDialogTableCombobox, old_table)
+ 
+diff --git a/src/firewall/core/ebtables.py b/src/firewall/core/ebtables.py
+index df4c31743cd7..65688571ce31 100644
+--- a/src/firewall/core/ebtables.py
++++ b/src/firewall/core/ebtables.py
+@@ -31,6 +31,7 @@ from firewall.errors import FirewallError, INVALID_IPV
+ import string
+ 
+ BUILT_IN_CHAINS = {
++    "broute": [ "BROUTING" ],
+     "nat": [ "PREROUTING", "POSTROUTING", "OUTPUT" ],
+     "filter": [ "INPUT", "OUTPUT", "FORWARD" ],
+ }
+-- 
+2.20.1
+
